@@ -6,4 +6,9 @@
 backend/.tools/
 *.log
 .env
-.env.local
+.env.*
+!.env.example
+Thumbs.db
+.DS_Store
+**/docs/
+**/skill/
