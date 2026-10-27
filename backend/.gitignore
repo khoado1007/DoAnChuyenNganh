@@ -1,0 +1,9 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.log
+appsettings.Production.json
+.env
+/src/ITManagement.Infrastructure/Persistence/Migrations/

@@ -1,0 +1,54 @@
+using ITManagement.Domain.Entities.Ticket;
+using ITManagement.Domain.Enums;
+using ITManagement.Domain.Interfaces.Repositories;
+using Microsoft.EntityFrameworkCore;
+
+namespace ITManagement.Infrastructure.Persistence.Repositories;
+
+public class TicketRepository : ITicketRepository
+{
+    private readonly AppDbContext _db;
+
+    public TicketRepository(AppDbContext db) => _db = db;
+
+    public Task<Ticket?> GetByIdAsync(Guid id, CancellationToken ct = default)
+        => _db.Tickets
+              .Include(t => t.History)
+              .Include(t => t.Comments)
+              .Include(t => t.CreatedBy)
+              .Include(t => t.AssignedTo)
+              .FirstOrDefaultAsync(t => t.Id == id, ct);
+
+    public Task<Ticket?> GetByNumberAsync(string ticketNumber, CancellationToken ct = default)
+        => _db.Tickets.FirstOrDefaultAsync(t => t.TicketNumber == ticketNumber, ct);
+
+    public async Task<IEnumerable<Ticket>> GetByCreatorAsync(Guid userId, CancellationToken ct = default)
+        => await _db.Tickets.Where(t => t.CreatedByUserId == userId).ToListAsync(ct);
+
+    public async Task<IEnumerable<Ticket>> GetByAssigneeAsync(Guid technicianId, CancellationToken ct = default)
+        => await _db.Tickets.Where(t => t.AssignedToUserId == technicianId).ToListAsync(ct);
+
+    public async Task<IEnumerable<Ticket>> GetByStatusAsync(TicketStatus status, CancellationToken ct = default)
+        => await _db.Tickets.Where(t => t.Status == status).ToListAsync(ct);
+
+    public async Task<IEnumerable<Ticket>> GetAllAsync(CancellationToken ct = default)
+        => await _db.Tickets
+                    .Include(t => t.CreatedBy)
+                    .Include(t => t.AssignedTo)
+                    .OrderByDescending(t => t.CreatedAt)
+                    .ToListAsync(ct);
+
+    public async Task AddAsync(Ticket ticket, CancellationToken ct = default)
+        => await _db.Tickets.AddAsync(ticket, ct);
+
+    public Task UpdateAsync(Ticket ticket, CancellationToken ct = default)
+    {
+        _db.Tickets.Update(ticket);
+        return Task.CompletedTask;
+    }
+
+    public Task<int> GetNextSequenceAsync(int year, CancellationToken ct = default)
+        // Keep the existing interface; PostgreSQL allocates safely across concurrent requests.
+        => _db.Database.SqlQueryRaw<int>("SELECT nextval('ticket_number_seq')::integer AS \"Value\"")
+            .SingleAsync(ct);
+}

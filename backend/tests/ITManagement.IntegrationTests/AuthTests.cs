@@ -1,0 +1,110 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using ITManagement.Infrastructure.Persistence;
+using ITManagement.Infrastructure.Persistence.Seed;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Xunit;
+
+namespace ITManagement.IntegrationTests;
+
+// Uses an isolated database; never connects to the application's development database.
+public sealed class ApiFactory : WebApplicationFactory<Program>
+{
+    private readonly string connection = new Npgsql.NpgsqlConnectionStringBuilder(
+        Environment.GetEnvironmentVariable("TEST_POSTGRES")
+        ?? "Host=localhost;Port=5432;Username=postgres;Password=postgres")
+    { Database = "itmanagement_test_" + Guid.NewGuid().ToString("N") }.ConnectionString;
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("Development");
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<DbContextOptions<AppDbContext>>();
+            services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connection));
+        });
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
+            await db.Database.EnsureDeletedAsync();
+        }
+        finally { await base.DisposeAsync(); }
+    }
+}
+
+public class AuthTests : IClassFixture<ApiFactory>
+{
+    private readonly ApiFactory factory;
+    public AuthTests(ApiFactory factory) => this.factory = factory;
+
+    [Fact]
+    public async Task Seeded_admin_can_login_and_restore_session()
+    {
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/auth/login", new { username = "admin", password = "Admin@12345" });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(json.GetProperty("success").GetBoolean());
+        var data = json.GetProperty("data");
+        Assert.Equal("Admin", data.GetProperty("user").GetProperty("role").GetString());
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", data.GetProperty("accessToken").GetString());
+        var me = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+        var profile = await me.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("admin", profile.GetProperty("data").GetProperty("username").GetString());
+        Assert.False(profile.GetProperty("data").TryGetProperty("passwordHash", out _));
+    }
+
+    [Theory]
+    [InlineData("admin", "incorrect-password")]
+    [InlineData("missing-account", "Admin@12345")]
+    public async Task Invalid_credentials_return_401_envelope(string username, string password)
+    {
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/auth/login", new { username, password });
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.False((await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("success").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Empty_login_returns_field_errors()
+    {
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/auth/login", new { username = "", password = "" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(json.GetProperty("success").GetBoolean());
+        Assert.Equal(JsonValueKind.Object, json.GetProperty("errors").ValueKind);
+    }
+
+    [Fact]
+    public async Task Anonymous_session_returns_401_envelope()
+    {
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.False((await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("success").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Seeding_twice_preserves_single_admin_with_quota()
+    {
+        using var scope = factory.Services.CreateScope();
+        await DatabaseSeeder.SeedAsync(scope.ServiceProvider);
+        await DatabaseSeeder.SeedAsync(scope.ServiceProvider);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var admin = await db.AppUsers.Include(u => u.StorageQuota).SingleAsync(u => u.Username == "admin");
+        Assert.NotNull(admin.StorageQuota);
+        Assert.Equal(10L * 1024 * 1024 * 1024, admin.StorageQuota.QuotaBytes);
+    }
+}
