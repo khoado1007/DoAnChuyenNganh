@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "itam-codex-engineering",
+  "version": "0.1.0",
+  "description": "Codex engineering workflows for an ITAM/ITSM Agent–Server student project with ASP.NET Core, React, PostgreSQL and Python agents.",
+  "author": {
+    "name": "Project owner"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "ITAM Codex Engineering",
+        "shortDescription": "ITAM coding workflows",
+        "longDescription": "Focused architecture, API, Python agent, frontend, testing and deployment skills for the ITAM/ITSM project.",
+        "developerName": "Project owner",
+        "category": "Productivity",
+        "capabilities": [],
+        "defaultPrompt": "Inspect this ITAM/ITSM repository, identify the smallest safe next step, and implement it with tests."
+      }
+    }
+  }
+}

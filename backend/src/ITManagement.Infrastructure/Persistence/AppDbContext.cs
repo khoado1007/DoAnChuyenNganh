@@ -13,6 +13,9 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
+    public DbSet<Domain.Entities.Agents.RegisteredAgent> Agents => Set<Domain.Entities.Agents.RegisteredAgent>();
+    public DbSet<Domain.Entities.Agents.EnrollmentToken> EnrollmentTokens => Set<Domain.Entities.Agents.EnrollmentToken>();
+
     // Domain entities
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<Domain.Entities.Asset.Asset> Assets => Set<Domain.Entities.Asset.Asset>();

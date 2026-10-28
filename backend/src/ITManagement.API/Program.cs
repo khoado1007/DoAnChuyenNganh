@@ -1,3 +1,5 @@
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using ITManagement.API.Extensions;
 using ITManagement.API.Middleware;
 using ITManagement.Application;
@@ -38,6 +40,13 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "IT Management API", Version = "v1" });
     c.AddBearerSecurityDefinition();
+    c.AddSecurityDefinition("Agent", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization", In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        Description = "Agent credential only. Format: Agent {credential}; user JWT is not accepted."
+    });
+    c.OperationFilter<AgentSecurityOperationFilter>();
 });
 
 builder.Services.AddJwtAuthentication(builder.Configuration);
@@ -49,6 +58,19 @@ builder.Services.AddCors(opts =>
                 builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:5173"])
               .AllowAnyHeader()
               .AllowAnyMethod()));
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = 429;
+    options.OnRejected = async (context, ct) =>
+        await context.HttpContext.Response.WriteAsJsonAsync(ApiResponse.Fail("Quá nhiều yêu cầu; vui lòng thử lại sau."), ct);
+    options.AddPolicy("agent-enrollment", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("agent-heartbeat", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
 
 var app = builder.Build();
 
@@ -63,6 +85,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseSerilogRequestLogging();
 app.UseCors();
+app.UseRouting();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

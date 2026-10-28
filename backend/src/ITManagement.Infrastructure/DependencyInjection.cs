@@ -43,6 +43,9 @@ public static class DependencyInjection
         services.AddScoped<ITicketRepository, TicketRepository>();
         services.AddScoped<IStorageRepository, StorageRepository>();
 
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<IAgentService, AgentService>();
+
         // Services
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IJwtService, JwtService>();

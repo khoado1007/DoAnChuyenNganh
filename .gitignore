@@ -12,3 +12,8 @@ Thumbs.db
 .DS_Store
 **/docs/
 **/skill/
+# Python Agent local artifacts and credentials
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+agent/state/

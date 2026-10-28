@@ -4,11 +4,12 @@ import { Avatar, Button, Dropdown, Typography } from 'antd';
 import { AppstoreOutlined, FileSearchOutlined, LaptopOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, TeamOutlined, ToolOutlined } from '@ant-design/icons';
 import type { UserResponse } from '../types/auth';
 
-export type Section = 'overview' | 'assets' | 'users' | 'tickets';
+export type Section = 'overview' | 'assets' | 'users' | 'tickets' | 'agents';
 const { Text } = Typography;
 const navItems: { key: Section; label: string; icon: ReactNode; group: string }[] = [
   { key: 'overview', label: 'Tổng quan', icon: <AppstoreOutlined />, group: 'KHÔNG GIAN LÀM VIỆC' },
   { key: 'tickets', label: 'Yêu cầu hỗ trợ', icon: <FileSearchOutlined />, group: 'DỊCH VỤ CNTT' },
+  { key: 'agents', label: 'Agent', icon: <LaptopOutlined />, group: 'QUẢN LÝ TÀI SẢN' },
   { key: 'assets', label: 'Tài sản', icon: <LaptopOutlined />, group: 'QUẢN LÝ TÀI SẢN' },
   { key: 'users', label: 'Tài khoản', icon: <TeamOutlined />, group: 'QUẢN TRỊ' },
 ];

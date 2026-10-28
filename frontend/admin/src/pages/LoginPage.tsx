@@ -30,7 +30,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: UserResponse) =
   return <main className="login-page">
     <section className="login-brand-panel">
       <div className="brand-lockup"><span className="brand-mark"><ToolOutlined /></span><span>IT <b>Desk</b></span></div>
-      <div className="login-brand-copy"><Text className="eyebrow inverse">CỔNG QUẢN TRỊ NỘI BỘ</Text><Title level={1}>Công nghệ vận hành<br />liền mạch.</Title><Text className="login-subtitle">Quản lý thiết bị, tài khoản và yêu cầu hỗ trợ tại một nơi.</Text></div>
+      <div className="login-brand-copy"><Text className="eyebrow inverse">CỔNG QUẢN TRỊ NỘI BỘ</Text><Title>{'Công nghệ vận hành\nliền mạch.'.normalize('NFC')}</Title><Text className="login-subtitle">Quản lý thiết bị, tài khoản và yêu cầu hỗ trợ tại một nơi.</Text></div>
       <Text className="login-footnote">IT Asset &amp; Service Management</Text>
     </section>
     <section className="login-form-panel"><div className="login-form-wrap">
@@ -45,4 +45,5 @@ export default function LoginPage({ onLogin }: { onLogin: (user: UserResponse) =
       <div className="login-secure"><CheckCircleOutlined /> Tài khoản Admin được khởi tạo nội bộ</div>
     </div><Text className="login-copyright">© {new Date().getFullYear()} IT Desk · Hệ thống quản lý CNTT nội bộ</Text></section>
   </main>;
+
 }

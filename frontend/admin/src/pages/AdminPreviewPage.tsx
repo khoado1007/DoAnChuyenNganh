@@ -1,3 +1,4 @@
+import AgentsPage from './AgentsPage';
 import AdminLayout from '../layouts/AdminLayout';
 import type { Section } from '../layouts/AdminLayout';
 import type { UserResponse } from '../types/auth';
@@ -73,6 +74,7 @@ const initialTickets: Row[] = [
 
 
 const titles: Record<Section, { title: string; description: string }> = {
+  agents: { title: 'Agent', description: 'Đăng ký và theo dõi kết nối Agent.' },
   overview: { title: 'Tổng quan', description: 'Theo dõi nhanh tình hình tài sản và dịch vụ CNTT.' },
   assets: { title: 'Tài sản', description: 'Danh sách thiết bị và trạng thái cấp phát hiện tại.' },
   users: { title: 'Tài khoản', description: 'Tài khoản nội bộ và vai trò trong hệ thống.' },
@@ -145,6 +147,8 @@ function AdminPreviewPage({ user, onLogout }: { user: UserResponse; onLogout: ()
 
   const title = titles[section];
   const createLabel = section === 'assets' ? 'Thêm tài sản' : section === 'users' ? 'Thêm tài khoản' : 'Tạo yêu cầu';
+
+  if (section === 'agents') return <AdminLayout user={user} onLogout={onLogout} section={section} title={title.title} onSectionChange={setSection}><AgentsPage /></AdminLayout>;
 
   return (
     <>
