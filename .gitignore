@@ -10,7 +10,10 @@ backend/.tools/
 !.env.example
 Thumbs.db
 .DS_Store
+# Local-only project plans, working files, and screenshots
 **/docs/
+# Private engineering instructions and local workflows
+/itam-codex-engineering/
 **/skill/
 # Python Agent local artifacts and credentials
 **/.venv/

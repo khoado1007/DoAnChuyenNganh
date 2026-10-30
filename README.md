@@ -26,8 +26,6 @@ flowchart LR
 - `frontend/admin/`: React 19, TypeScript, Vite và Ant Design; SPA phục vụ cả ba vai trò.
 - `backend/`: .NET 10 Web API theo các lớp API, Application, Domain và Infrastructure; Entity Framework Core, ASP.NET Identity và PostgreSQL.
 - `agent/`: Python Agent với chế độ `real` và `simulated`.
-- `itam-codex-engineering/`: skills, script kiểm thử và roadmap kỹ thuật; không phải mã runtime của ứng dụng.
-- `docs/`: kế hoạch và tài liệu dự án.
 
 Khi chạy Compose, Nginx phục vụ web và chuyển tiếp `/api` tới API. API cũng được publish riêng để phục vụ Agent và kiểm thử.
 
@@ -49,7 +47,7 @@ Khi chạy Compose, Nginx phục vụ web và chuyển tiếp `/api` tới API. 
 - Upload/quota đầy đủ và file portal chưa triển khai.
 - Dashboard thật, quy trình ticket ba vai trò, hardening triển khai, backup/restore và nghiệm thu end-to-end là các phần roadmap.
 
-Các bản ghi tạo trong những màn preview chỉ giữ trong state của trang, có thể mất khi tải lại. Chi tiết từng giai đoạn xem [roadmap hoàn thiện](itam-codex-engineering/COMPLETION-ROADMAP.md).
+Các bản ghi tạo trong những màn preview chỉ giữ trong state của trang, có thể mất khi tải lại. Không dùng Dashboard hoặc Ticket preview cho báo cáo nghiệp vụ.
 
 ## Yêu cầu môi trường
 
@@ -178,21 +176,17 @@ Backend integration tests cần PostgreSQL riêng trên `127.0.0.1:55432`. Khôn
 docker run --rm -d --name itam-test-postgres -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:55432:5432 postgres:16-alpine
 ```
 
-Chạy bộ kiểm thử tập trung từ thư mục gốc:
+Chạy các kiểm thử từ thư mục gốc repository:
 
 ```powershell
-.\itam-codex-engineering\scripts\Test-Project.ps1
+$env:TEST_POSTGRES = 'Host=127.0.0.1;Port=55432;Username=postgres;Password=postgres'
+dotnet test .\backend\ITManagement.slnx
+agent\.venv\Scripts\python.exe -m pytest .\agent\tests -q
+npm --prefix frontend/admin test
+npm --prefix frontend/admin run build
 ```
 
-Hoặc chạy từng phạm vi:
-
-```powershell
-.\itam-codex-engineering\scripts\Test-Project.ps1 -Scope backend
-.\itam-codex-engineering\scripts\Test-Project.ps1 -Scope frontend
-.\itam-codex-engineering\scripts\Test-Project.ps1 -Scope agent
-```
-
-Script `all` chạy .NET integration tests, pytest và frontend tests/build; backend dùng biến `TEST_POSTGRES` mặc định trỏ tới cổng 55432. Dừng PostgreSQL test sau khi hoàn tất:
+Dừng PostgreSQL test sau khi hoàn tất:
 
 ```powershell
 docker stop itam-test-postgres
@@ -205,14 +199,11 @@ Smoke tests trình duyệt cho Agent, tài khoản, tài sản và cấp phát n
 - PostgreSQL và private file storage được lưu ở Docker named volumes khi chạy Compose.
 - API file hiện có list/download/delete theo owner; upload chưa mở. Delete cập nhật metadata/quota logic trong transaction, sau đó dọn blob; nếu filesystem lỗi, gọi lại DELETE cùng ID để retry cleanup.
 - File không được phục vụ như static asset. Không mount private volume vào Nginx hoặc chia sẻ trực tiếp đường dẫn trên đĩa.
-- Sao lưu cần bao gồm cả PostgreSQL lẫn private file storage và phải kiểm tra quy trình restore; backup/restore production chưa được nghiệm thu trong roadmap.
+- Sao lưu cần bao gồm cả PostgreSQL lẫn private file storage và phải kiểm tra quy trình restore; chưa có quy trình backup/restore production được xác nhận.
 - Khi nâng phiên bản, không tự xóa volume hoặc chạy migration trên dữ liệu quan trọng nếu chưa có backup và kế hoạch rollback.
 
-## Tài liệu liên quan
+## Tài liệu
 
-- [Agent: cài đặt và sử dụng](agent/README.md)
-- [Roadmap và trạng thái hoàn thiện](itam-codex-engineering/COMPLETION-ROADMAP.md)
-- [Kế hoạch kiến trúc React + Web API](docs/superpowers/plans/2026-10-28-react-web-api.md)
-- [Hướng dẫn script kiểm thử](itam-codex-engineering/scripts/Test-Project.ps1)
+- [Python Agent: cài đặt, vận hành và kiểm thử](agent/README.md)
 
-Trạng thái tính năng trong README này được đối chiếu theo repository ngày 30/10/2026. Cập nhật phần trạng thái sau mỗi thay đổi nghiệp vụ để tài liệu luôn phân biệt rõ chức năng thật, preview và roadmap.
+Trạng thái tính năng trong README được đối chiếu với repository ngày 30/10/2026. Các tính năng chưa kết nối API được ghi rõ là preview hoặc chưa triển khai.

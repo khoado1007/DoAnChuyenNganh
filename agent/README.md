@@ -1,24 +1,24 @@
-# Python Agent — đăng ký và heartbeat
+# Python Agent: đăng ký và heartbeat
 
 Một codebase cho `real` và `simulated`, mỗi instance dùng một file state riêng. `real` chỉ gửi hostname, OS, CPU, tổng RAM và phiên bản Agent khi truyền `--consent-inventory`. `simulated` đọc fixture và server giữ nhãn chế độ từ token, không cho heartbeat tự đổi nhãn. Không tạo tài khoản OS, không chạy lệnh từ xa, không đọc tài liệu cá nhân.
 
-## Chạy từ thư mục itam-codex-engineering
+## Cài đặt và chạy
 
-Cần Python 3.11+ và API/PostgreSQL đang chạy. Lệnh ví dụ PowerShell:
+Các lệnh dưới đây chạy từ thư mục gốc repository. Cần Python 3.11+ và API/PostgreSQL đang hoạt động.
 
 ```powershell
-python -m venv ../agent/.venv
-../agent/.venv/Scripts/python.exe -m pip install -r ../agent/requirements-dev.txt
+python -m venv agent\.venv
+agent\.venv\Scripts\python.exe -m pip install -r agent\requirements-dev.txt
 ```
 
 Đăng nhập Admin trên web, mở **Agent**, tạo/chọn tài sản và cấp token đúng chế độ. Chạy lệnh sau, dán token vào lời nhắc ẩn; không truyền token qua command line:
 
 ```powershell
-../agent/.venv/Scripts/python.exe ../agent/itam_agent.py enroll --server http://127.0.0.1:8080 --mode real --state ../agent/state/real.json --consent-inventory
-../agent/.venv/Scripts/python.exe ../agent/itam_agent.py run --server http://127.0.0.1:8080 --mode real --state ../agent/state/real.json --consent-inventory
+agent\.venv\Scripts\python.exe agent\itam_agent.py enroll --server http://127.0.0.1:8080 --mode real --state agent\state\real.json --consent-inventory
+agent\.venv\Scripts\python.exe agent\itam_agent.py run --server http://127.0.0.1:8080 --mode real --state agent\state\real.json --consent-inventory
 ```
 
-Đối với mô phỏng, cấp token thứ hai cho tài sản thứ hai rồi dùng `--mode simulated --state ../agent/state/simulated.json`. Hai instance trên một PC không chứng minh hai thiết bị vật lý. Có thể dùng `once` thay `run` để gửi một heartbeat. Ctrl+C dừng nhẹ nhàng.
+Đối với mô phỏng, cấp token thứ hai cho tài sản thứ hai rồi dùng `--mode simulated --state agent\state\simulated.json`. Hai instance trên một PC không chứng minh hai thiết bị vật lý. Có thể dùng `once` thay `run` để gửi một heartbeat. Ctrl+C dừng nhẹ nhàng.
 
 HTTP chỉ chấp nhận localhost/loopback; môi trường khác bắt buộc HTTPS có chứng chỉ hợp lệ. Không tự theo redirect. Request timeout 15 giây; heartbeat mặc định 30 giây, tùy chọn 10–60 giây; lỗi mạng/408/429/5xx dùng backoff+jitter tối đa 300 giây. 401/403/410 dừng và lưu trạng thái bị thu hồi, không tự đăng ký lại. Các lỗi giao thức 4xx khác cũng dừng.
 
@@ -45,30 +45,30 @@ Server dùng UTC; sequence trùng/cũ không cập nhật last-seen hoặc inven
 
 ```powershell
 # PostgreSQL tách riêng; không dùng database nghiệp vụ
- docker run -d --name itam-agent-tests -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:55432:5432 postgres:16-alpine
+docker run -d --name itam-agent-tests -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:55432:5432 postgres:16-alpine
 $env:TEST_POSTGRES='Host=127.0.0.1;Port=55432;Username=postgres;Password=postgres'
-dotnet test ../backend/ITManagement.slnx
-../agent/.venv/Scripts/python.exe -m pytest ../agent/tests -q
-npm --prefix ../frontend/admin test
-npm --prefix ../frontend/admin run build
+dotnet test .\backend\ITManagement.slnx
+agent\.venv\Scripts\python.exe -m pytest .\agent\tests -q
+npm --prefix frontend/admin test
+npm --prefix frontend/admin run build
 ```
 
 Live smoke: khởi chạy API Development trên `127.0.0.1:5189`, trỏ `ConnectionStrings__DefaultConnection` tới database `itam_agent_e2e` trên PostgreSQL test. Đặt `ITAM_TEST_PASSWORD` bằng mật khẩu admin test rồi chạy:
 
 ```powershell
-../agent/.venv/Scripts/python.exe ../agent/e2e_smoke.py --server http://127.0.0.1:5189 --consent-inventory
+agent\.venv\Scripts\python.exe agent\e2e_smoke.py --server http://127.0.0.1:5189 --consent-inventory
 ```
 
-UI smoke: Vite cổng 5190 với `API_PROXY_TARGET=http://127.0.0.1:5189`, cần Playwright và Edge. Đặt `PLAYWRIGHT_MODULE` tới module Playwright nếu không có trong node_modules; chạy `node ../frontend/admin/tests/agents/smoke.cjs`. Có thể đặt `ITAM_UI_URL` và `ITAM_SCREENSHOT`. Smoke test tạo bản ghi test thật, chỉ chạy trên database dùng thử. Các bài kiểm thử allocation/files/quota/tickets không thuộc thay đổi này.
+UI smoke: Vite cổng 5190 với `API_PROXY_TARGET=http://127.0.0.1:5189`, cần Playwright và Edge. Đặt `PLAYWRIGHT_MODULE` tới module Playwright nếu không có trong node_modules; chạy `node .\frontend\admin\tests\agents\smoke.cjs`. Có thể đặt `ITAM_UI_URL` và `ITAM_SCREENSHOT`. Smoke test tạo bản ghi test thật, chỉ chạy trên database dùng thử. Các bài kiểm thử allocation/files/quota/tickets không thuộc thay đổi này.
 
 ## Phục hồi sau khi mất state hoặc response đăng ký
 
 Admin mở Agent → **Cấp lại / Phục hồi**, chọn đúng Real/Simulated và nhập lý do. POST `/api/agents/recovery-tokens` nhận `{assetId, mode, reason}`. Ngay khi cấp token, identity cũ bị thu hồi vĩnh viễn, credential cũ bị từ chối; bản ghi, lý do và snapshot cũ vẫn giữ. Token mới có hạn 15 phút và dùng một lần; cấp lại token sẽ hủy token chưa dùng trước đó.
 
-Dừng instance cũ. Nếu còn state, chạy từ folder `itam-codex-engineering`:
+Dừng instance cũ. Nếu còn state, chạy từ thư mục gốc repository:
 
 ```powershell
-../agent/.venv/Scripts/python.exe ../agent/itam_agent.py re-enroll --server http://127.0.0.1:5038 --mode simulated --state ../agent/.state/simulated.json
+agent\.venv\Scripts\python.exe agent\itam_agent.py re-enroll --server http://127.0.0.1:5038 --mode simulated --state agent\state\simulated.json
 ```
 
 Dùng đúng đường dẫn state của instance và đúng mode đã chọn trên UI; Real cần thêm `--consent-inventory`. Token nhập tại lời nhắc, không truyền trên command line. `re-enroll` tạo instance ID mới và xóa credential/pending/sequence cũ trước khi gửi yêu cầu. Nếu state mất hoàn toàn, dùng `enroll` với đường dẫn state mới. Không chạy hai instance trên cùng state.
