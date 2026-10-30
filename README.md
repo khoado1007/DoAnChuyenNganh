@@ -1,124 +1,218 @@
 # IT Management
+Ứng dụng đồ án quản lý tài sản CNTT (ITAM) và hỗ trợ dịch vụ CNTT (ITSM), định hướng một hệ thống nội bộ có thể dựng lại và trình diễn: React SPA, ASP.NET Core Web API, PostgreSQL, kho file riêng tư và Python endpoint Agent.
 
-Ứng dụng quản lý tài sản và hỗ trợ CNTT, gồm React + TypeScript, ASP.NET Core Web API, PostgreSQL và Python Agent. Agent, tài khoản và danh mục tài sản đã kết nối API thật. Dashboard và ticket vẫn là bản xem trước; cấp phát, file/quota và workflow ticket đang nằm trong roadmap.
+Tài liệu này hướng dẫn cài đặt, khởi chạy, sử dụng theo vai trò và kiểm thử. Tính năng đang có và phần còn nằm trong roadmap được phân biệt rõ để dữ liệu xem trước không bị hiểu nhầm là nghiệp vụ đã kết nối.
 
-## Thành phần
+## Mục tiêu và phạm vi
 
-- `backend/`: API .NET 10 theo các lớp API, Application, Domain và Infrastructure; PostgreSQL qua Entity Framework Core.
-- `frontend/admin/`: ứng dụng React 19 + TypeScript + Vite cho giao diện quản trị.
-- `agent/`: một Python Agent chạy ở chế độ `real` hoặc `simulated`.
-- `itam-codex-engineering/`: hướng dẫn kỹ thuật, skills và roadmap; không phải mã chạy của ứng dụng.
+- Quản lý người dùng nội bộ, tài sản và vòng đời cấp phát/trả tài sản.
+- Đăng ký, theo dõi và thu hồi Agent; tách trạng thái kết nối, chính sách Agent và trạng thái tài sản.
+- Cung cấp trang theo vai trò Admin, Employee và Technician.
+- Phát triển tiếp luồng hỗ trợ ticket và file portal theo roadmap.
 
-## Chạy local bằng Docker Compose
+Dự án không hướng tới đăng nhập hệ điều hành, remote shell/remote command, domain controller, VM management hay nền tảng ITSM quy mô lớn. Inventory của Agent chỉ thu thập trong phạm vi đã đồng ý; dữ liệu người dùng thuộc tài khoản, không thuộc Agent.
 
-Cần Docker Desktop đang chạy. Từ thư mục gốc repository:
+## Kiến trúc
+
+```mermaid
+flowchart LR
+	Browser[Trình duyệt React] -->|Trang và /api| Web[Nginx web]
+	Web -->|/api proxy| API[ASP.NET Core Web API]
+	Agent[Python Agent] -->|Enrollment và heartbeat| API
+	API --> DB[(PostgreSQL)]
+	API --> Files[(Private file storage)]
+```
+
+- `frontend/admin/`: React 19, TypeScript, Vite và Ant Design; SPA phục vụ cả ba vai trò.
+- `backend/`: .NET 10 Web API theo các lớp API, Application, Domain và Infrastructure; Entity Framework Core, ASP.NET Identity và PostgreSQL.
+- `agent/`: Python Agent với chế độ `real` và `simulated`.
+- `itam-codex-engineering/`: skills, script kiểm thử và roadmap kỹ thuật; không phải mã runtime của ứng dụng.
+- `docs/`: kế hoạch và tài liệu dự án.
+
+Khi chạy Compose, Nginx phục vụ web và chuyển tiếp `/api` tới API. API cũng được publish riêng để phục vụ Agent và kiểm thử.
+
+## Trạng thái hiện tại
+
+**Đã kết nối API thật**
+
+- Đăng nhập và phân quyền theo vai trò; Admin quản lý Employee/Technician tại `/admin/users`. Khóa tài khoản hoặc đổi vai trò làm JWT cũ mất hiệu lực. Tài khoản Admin bootstrap không thể bị sửa/khóa qua màn quản lý thông thường.
+- Quản lý tài sản tại `/admin/assets`: tạo, xem chi tiết, tìm kiếm/phân trang, cập nhật thông tin và vòng đời.
+- Cấp phát/trả/thu hồi tài sản và xem lịch sử; Employee xem tài sản đang được cấp tại `/employee`.
+- Quản lý Agent tại `/admin/agents`: enrollment token dùng một lần, heartbeat, disable, phục hồi/re-enrollment và hiển thị riêng connectivity/policy/trạng thái tài sản.
+- API file riêng tư cho Employee: liệt kê, tải xuống và xóa theo chủ sở hữu. Upload và giao diện file chưa có.
+- Employee và Technician có trang portal theo vai trò; phạm vi portal hiện tại còn giới hạn.
+
+**Còn là bản xem trước hoặc chưa hoàn thiện**
+
+- Dashboard tại `/admin` hiển thị số liệu minh họa.
+- Ticket tại `/admin/tickets` là dữ liệu xem trước phía trình duyệt; chưa có workflow ticket persist qua API. Không dùng dữ liệu này làm báo cáo nghiệp vụ.
+- Upload/quota đầy đủ và file portal chưa triển khai.
+- Dashboard thật, quy trình ticket ba vai trò, hardening triển khai, backup/restore và nghiệm thu end-to-end là các phần roadmap.
+
+Các bản ghi tạo trong những màn preview chỉ giữ trong state của trang, có thể mất khi tải lại. Chi tiết từng giai đoạn xem [roadmap hoàn thiện](itam-codex-engineering/COMPLETION-ROADMAP.md).
+
+## Yêu cầu môi trường
+
+- Windows 10/11 với PowerShell, hoặc môi trường tương đương có Docker Compose.
+- Docker Desktop để chạy nhanh toàn bộ ứng dụng hoặc PostgreSQL kiểm thử.
+- .NET 10 SDK cho backend và integration tests.
+- Node.js/npm cho frontend.
+- Python 3.11 trở lên cho Agent và kiểm thử Agent.
+
+## Khởi chạy nhanh bằng Docker Compose
+
+Đây là cách đơn giản nhất để chạy demo toàn bộ stack. Từ thư mục gốc repository:
 
 ```powershell
 docker compose -f backend/docker-compose.yml up --build
 ```
 
-Sau khi các container khởi động:
+Đợi PostgreSQL healthy và API khởi động, sau đó mở:
 
-- Web: <http://localhost:8088>
-- API: <http://localhost:8080>
-- Swagger: không bật trong cấu hình Compose Production; chạy API ở Development để dùng `/swagger`.
+| Dịch vụ | URL |
+| --- | --- |
+| Web | http://localhost:8088 |
+| API | http://localhost:8080 |
+| Swagger | Chỉ bật khi API chạy với môi trường `Development`; Compose chạy `Production` |
 
-API tự chạy migration và seed dữ liệu khi khởi động. Tài khoản Admin mặc định hiện được seed trong mã nguồn:
+API tự áp dụng migration và seed các role/tài khoản Admin ban đầu. Đăng nhập demo:
 
-- Tên đăng nhập: `admin` (email: `admin@itmanagement.local`)
+- Tên đăng nhập: `admin`
+- Email: `admin@itmanagement.local`
 - Mật khẩu: `Admin@12345`
 
-Đây là thông tin demo, không an toàn cho môi trường dùng chung hoặc public. Compose hiện dùng mật khẩu PostgreSQL mặc định và JWT có giá trị fallback; chỉ chạy trong máy local đáng tin cậy, không mở các cổng ra mạng công cộng. Hãy thay cấu hình bảo mật và thiết kế bootstrap phù hợp trước khi triển khai. Thay đổi `JWT_SECRET` một mình không đủ để bảo vệ database.
+Đổi thông tin demo trước khi dùng chung. Compose hiện có mật khẩu PostgreSQL mặc định và JWT fallback; chỉ dùng trên máy local đáng tin cậy, không expose các cổng ra Internet. Đặt `JWT_SECRET` mạnh không thay thế việc đổi credential PostgreSQL và rà soát toàn bộ cấu hình triển khai. Đây chưa phải cấu hình production.
 
-Compose lưu dữ liệu PostgreSQL và file trong named volumes. Dừng ứng dụng mà vẫn giữ dữ liệu:
+Compose lưu PostgreSQL và file trong named volumes. Dừng stack nhưng giữ dữ liệu:
 
 ```powershell
 docker compose -f backend/docker-compose.yml down
 ```
 
-Không thêm `-v` nếu muốn giữ dữ liệu; tùy chọn đó xóa các volumes.
-
-## Python Agent
-
-Agent cần API và PostgreSQL đang chạy. Đăng nhập bằng tài khoản Admin, mở trang Agent, tạo tài sản nếu cần rồi cấp enrollment token. Token chỉ hiển thị một lần; không đưa token hoặc credential vào source control hay command line.
-
-Hướng dẫn cài Python, enrollment, heartbeat, chế độ `real`/`simulated` và giới hạn bảo mật nằm trong [agent/README.md](agent/README.md). Hai Agent chạy trên cùng một máy không đại diện cho hai thiết bị vật lý. Chế độ `real` chỉ gửi inventory khi có đồng ý rõ ràng.
+Chỉ dùng `down -v` khi chủ ý xóa dữ liệu database và file trong volumes. Không dùng thao tác đó để dọn môi trường có dữ liệu cần giữ.
 
 ## Chạy frontend và API riêng
 
-Để phát triển giao diện ngoài Docker, cần Node.js và npm:
+Cách này hữu ích khi phát triển UI. Ví dụ dưới đây dùng PostgreSQL từ Compose, API chạy Development trên cổng `5038`, Vite proxy `/api` tới cổng đó. Mở các terminal riêng và chạy từ thư mục gốc.
+
+1. Khởi chạy PostgreSQL:
 
 ```powershell
-cd frontend/admin
-npm ci
-npm run dev
+docker compose -f backend/docker-compose.yml up -d postgres
 ```
 
-Vite in URL local sau khi khởi động. API phải được chạy riêng và cấu hình kết nối PostgreSQL, JWT, CORS và file storage tương ứng trong `backend/src/ITManagement.API/appsettings*.json` hoặc biến môi trường. Không dùng cấu hình mẫu mặc định cho môi trường public. Docker Compose là lựa chọn khởi chạy nhanh đã cấu hình sẵn các dịch vụ.
+2. Chạy API:
+
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+$env:ConnectionStrings__DefaultConnection = 'Host=localhost;Port=5432;Database=itmanagement;Username=postgres;Password=postgres'
+dotnet run --project .\backend\src\ITManagement.API --urls http://localhost:5038
+```
+
+Swagger Development: http://localhost:5038/swagger. Không dùng credential/cấu hình mẫu này trên mạng công cộng.
+
+3. Cài và chạy frontend:
+
+```powershell
+npm ci --prefix frontend/admin
+npm --prefix frontend/admin run dev
+```
+
+Mở URL Vite được in ra terminal, thường là http://localhost:5173. Vite mặc định proxy `/api` tới `http://localhost:5038`; nếu đổi cổng API, cập nhật `API_PROXY_TARGET` trong file env của Vite theo cấu hình dự án.
+
+Khi chạy API ngoài Compose, hãy cấu hình connection string, JWT secret, CORS và `FileStorage:RootPath` phù hợp trong `appsettings*.json` hoặc environment variables. Không để private file storage nằm trong thư mục static/public của web server.
+
+## Hướng dẫn sử dụng
+
+### Admin
+
+1. Đăng nhập bằng tài khoản Admin.
+2. Vào **Tài khoản** để tạo/cập nhật Employee hoặc Technician, khóa/mở tài khoản và quản lý vai trò.
+3. Vào **Tài sản** để tạo tài sản, xem chi tiết, tìm kiếm và quản lý vòng đời.
+4. Trong chi tiết tài sản, dùng **Cấp phát / lịch sử** để cấp cho Employee đang hoạt động, xem lịch sử, trả hoặc thu hồi. Mỗi lần cấp lại tạo bản ghi lịch sử mới. Không chuyển thẳng tài sản sang `Assigned`; trạng thái cấp phát được quản lý qua workflow assignment. `Retired` là trạng thái cuối.
+5. Vào **Agent** để đăng ký Agent cho tài sản, theo dõi heartbeat, disable hoặc phục hồi Agent. Enrollment token chỉ hiển thị một lần và có hạn; chuyển token cho Agent qua lời nhắc bảo mật, không ghi vào source control.
+6. Dashboard và Ticket hiện vẫn là preview, không dùng để vận hành thật.
+
+### Employee và Technician
+
+- Employee đăng nhập tại `/employee` để xem hồ sơ và tài sản đang được cấp cho chính mình. API xác định chủ sở hữu từ JWT, không tin `userId` do client tự gửi.
+- Technician đăng nhập tại `/technician`. Giao diện portal đã có nhưng workflow ticket đầy đủ chưa triển khai.
+- Route được giới hạn theo vai trò ở frontend và API; không chia sẻ phiên đăng nhập hoặc credential giữa các tài khoản.
+
+### Python Agent
+
+1. Đảm bảo API/PostgreSQL đang chạy và tài sản đã được tạo.
+2. Admin mở **Agent**, chọn tài sản/chế độ và tạo enrollment token.
+3. Cài dependencies, enrollment, rồi chạy Agent bằng file state riêng cho mỗi instance.
+
+Hướng dẫn lệnh đầy đủ cho `real`/`simulated`, consent, heartbeat, recovery, state/credential và live smoke nằm trong [agent/README.md](agent/README.md). Chế độ `real` chỉ gửi hostname, OS, CPU, tổng RAM và phiên bản Agent khi có `--consent-inventory`. Chế độ `simulated` dùng fixture và được server đánh dấu theo token. Hai Agent trên cùng máy không đại diện cho hai thiết bị vật lý. Không commit state hoặc credential.
+
+## API chính
+
+API trả response theo envelope `success/message/data/errors`. Swagger/OpenAPI chỉ bật ở Development. Các API quản trị yêu cầu Admin; API cá nhân lấy owner từ danh tính xác thực.
+
+| Nhóm | Endpoint tiêu biểu | Mục đích |
+| --- | --- | --- |
+| Tài khoản | `GET/POST /api/users`, `PUT /api/users/{id}` | Admin quản lý Employee/Technician |
+| Tài sản | `GET/POST /api/assets`, `GET /api/assets/search`, `GET/PUT /api/assets/{id}` | Tra cứu và quản lý tài sản; `GET /api/assets` còn phục vụ lookup tương thích Agent |
+| Cấp phát | `POST /api/assets/{id}/assign`, `POST /api/assets/{id}/return`, `POST /api/assets/{id}/revoke`, `GET /api/assets/{id}/assignments` | Admin cấp, trả/thu hồi và xem lịch sử |
+| Tài sản của tôi | `GET /api/me/assets` | Employee xem tài sản theo JWT |
+| Agent | `POST /api/agents/enrollment-tokens`, `POST /api/agents/enroll`, `POST /api/agents/heartbeat`, `GET /api/agents` | Enrollment, telemetry và quản trị Agent |
+| File riêng tư | `GET /api/files`, `GET /api/files/{id}/download`, `DELETE /api/files/{id}` | Employee liệt kê/tải/xóa file thuộc tài khoản; chưa có upload |
+
+Contract Agent, payload và recovery được mô tả chi tiết trong [agent/README.md](agent/README.md). Các endpoint quản trị Agent yêu cầu Admin; Agent dùng credential riêng, không dùng JWT người dùng.
 
 ## Kiểm thử
 
-Frontend:
+### Cài dependencies
 
 ```powershell
-npm --prefix frontend/admin test
-npm --prefix frontend/admin run build
+npm ci --prefix frontend/admin
+python -m venv agent/.venv
+agent\.venv\Scripts\python.exe -m pip install -r agent/requirements-dev.txt
 ```
 
-Python Agent (cài dependencies development trước):
+Backend integration tests cần PostgreSQL riêng trên `127.0.0.1:55432`. Không trỏ biến `TEST_POSTGRES` vào database nghiệp vụ. Có thể tạo PostgreSQL test tạm bằng Docker:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r agent/requirements-dev.txt
-.venv\Scripts\python.exe -m pytest agent/tests -q
+docker run --rm -d --name itam-test-postgres -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:55432:5432 postgres:16-alpine
 ```
 
-Backend/integration tests cần .NET 10 SDK và PostgreSQL test riêng, không dùng database có dữ liệu cần giữ:
+Chạy bộ kiểm thử tập trung từ thư mục gốc:
 
 ```powershell
-dotnet test backend/ITManagement.slnx
+.\itam-codex-engineering\scripts\Test-Project.ps1
 ```
 
-Xem [agent/README.md](agent/README.md) để biết cách cấu hình PostgreSQL test, chạy live smoke và UI smoke.
-
-## Trạng thái chức năng
-
-- Đã có đăng nhập qua API và quản lý Agent: enrollment token dùng một lần, heartbeat, hiển thị connectivity/policy riêng biệt và vô hiệu hóa Agent.
-- Agent giữ credential trong state riêng; `real` cần cờ đồng ý inventory, còn `simulated` dùng fixture và được đánh dấu rõ.
-- Admin quản lý Employee/Technician tại `/admin/users`; khóa/mở hoặc đổi vai trò thu hồi JWT cũ. Admin bootstrap được bảo vệ khỏi sửa/khóa qua màn này. Employee/Technician có trang hồ sơ riêng tại `/employee` và `/technician`.
-- Tài sản tại `/admin/assets` có tạo, chi tiết, tìm kiếm/phân trang và cập nhật vòng đời. Không đặt Assigned trực tiếp; Retired là trạng thái cuối. Dashboard và ticket vẫn là preview.
-- Đã có recovery Agent và API file riêng tư (list/download/delete). Upload/quota đầy đủ, file portal và workflow ticket vẫn là các phần cần hoàn thiện.
-
-Chi tiết trạng thái và kế hoạch nằm trong [itam-codex-engineering/COMPLETION-ROADMAP.md](itam-codex-engineering/COMPLETION-ROADMAP.md). Hợp đồng Agent/API được mô tả trong [agent/README.md](agent/README.md).
-## Tiếp tục roadmap và kiểm thử tập trung
-
-Chạy từ thư mục `itam-codex-engineering`:
+Hoặc chạy từng phạm vi:
 
 ```powershell
-./scripts/Test-Project.ps1             # PostgreSQL test phải đang chạy ở cổng 55432
-./scripts/Test-Project.ps1 -Scope backend
-./scripts/Test-Project.ps1 -Scope frontend
-./scripts/Test-Project.ps1 -Scope agent
+.\itam-codex-engineering\scripts\Test-Project.ps1 -Scope backend
+.\itam-codex-engineering\scripts\Test-Project.ps1 -Scope frontend
+.\itam-codex-engineering\scripts\Test-Project.ps1 -Scope agent
 ```
 
-Script chỉ dùng database test do ApiFactory tạo; không trỏ `TestPostgres` vào hệ thống production. Cách tạo PostgreSQL test và chạy smoke nằm trong `agent/README.md`. Các browser smoke bổ sung: `frontend/admin/tests/users/smoke.cjs` và `frontend/admin/tests/assets/smoke.cjs`, cùng biến môi trường với smoke Agent (`PLAYWRIGHT_MODULE`, `ITAM_UI_URL`, `ITAM_TEST_PASSWORD`).
+Script `all` chạy .NET integration tests, pytest và frontend tests/build; backend dùng biến `TEST_POSTGRES` mặc định trỏ tới cổng 55432. Dừng PostgreSQL test sau khi hoàn tất:
 
-Migration `UserSecurityVersion` thêm cột để thu hồi phiên theo trạng thái/vai trò. Sau nâng cấp, JWT cũ không có claim phiên bản sẽ yêu cầu đăng nhập lại. API tài khoản: GET/POST `/api/users`, PUT `/api/users/{id}`; API tài sản: GET `/api/assets` vẫn giữ lookup tương thích Agent, GET `/api/assets/search` trả phân trang, GET/PUT `/api/assets/{id}`, POST `/api/assets`. Toàn bộ endpoint quản lý này dành cho Admin.
+```powershell
+docker stop itam-test-postgres
+```
 
-## Cấp phát và tài sản nhân viên
+Smoke tests trình duyệt cho Agent, tài khoản, tài sản và cấp phát nằm trong `frontend/admin/tests/`; deployment smoke chạy bằng `npm --prefix frontend/admin run test:deployment`. Các smoke UI cần API/Vite test riêng, Playwright/Edge và biến môi trường test. Xem [agent/README.md](agent/README.md) để biết cách chạy live Agent/UI smoke và thiết lập test database chi tiết. Smoke tạo dữ liệu thật, chỉ chạy trên môi trường dùng thử.
 
-Admin mở **Tài sản → Cấp phát / lịch sử**, tìm Employee đang hoạt động để cấp tài sản sẵn sàng. Khi trả/thu hồi, ghi chú đóng được giữ riêng với ghi chú cấp; mỗi lần cấp lại tạo bản ghi mới. Nhân viên xem tài sản hiện tại tại `/employee`. Trả tài sản không vô hiệu hóa Agent và không thay đổi dữ liệu cá nhân của tài khoản.
+## Lưu trữ và vận hành dữ liệu
 
-API Admin: POST `/api/assets/{id}/assign` (`userId`, `notes`), POST `/api/assets/{id}/return` hoặc `/revoke` (`assignmentId`, `notes`), GET `/api/assets/{id}/assignments`. API Employee: GET `/api/me/assets`; owner lấy từ JWT, không nhận userId làm bằng chứng quyền. Request đóng phải trùng lần cấp đang hoạt động, chống thao tác từ trang cũ.
+- PostgreSQL và private file storage được lưu ở Docker named volumes khi chạy Compose.
+- API file hiện có list/download/delete theo owner; upload chưa mở. Delete cập nhật metadata/quota logic trong transaction, sau đó dọn blob; nếu filesystem lỗi, gọi lại DELETE cùng ID để retry cleanup.
+- File không được phục vụ như static asset. Không mount private volume vào Nginx hoặc chia sẻ trực tiếp đường dẫn trên đĩa.
+- Sao lưu cần bao gồm cả PostgreSQL lẫn private file storage và phải kiểm tra quy trình restore; backup/restore production chưa được nghiệm thu trong roadmap.
+- Khi nâng phiên bản, không tự xóa volume hoặc chạy migration trên dữ liệu quan trọng nếu chưa có backup và kế hoạch rollback.
 
-Migration `AssetAssignmentLifecycle` bổ sung audit đóng và unique index cho mỗi tài sản có tối đa một assignment active; không xóa dữ liệu cũ. Nếu dữ liệu nhập thủ công trước đây có nhiều assignment active trên một tài sản, phải rà soát dữ liệu trước khi migration có thể áp dụng. Browser smoke: `frontend/admin/tests/assignments/smoke.cjs`, dùng cùng biến môi trường như smoke Agent.
+## Tài liệu liên quan
 
-## Kho file riêng tư — P06
+- [Agent: cài đặt và sử dụng](agent/README.md)
+- [Roadmap và trạng thái hoàn thiện](itam-codex-engineering/COMPLETION-ROADMAP.md)
+- [Kế hoạch kiến trúc React + Web API](docs/superpowers/plans/2026-10-28-react-web-api.md)
+- [Hướng dẫn script kiểm thử](itam-codex-engineering/scripts/Test-Project.ps1)
 
-Đã có API dành cho Employee: GET `/api/files?page=1&pageSize=20`, GET `/api/files/{id}/download`, DELETE `/api/files/{id}`. Danh sách/tải/xóa được giới hạn theo chủ sở hữu từ JWT; userId/Agent credential không cấp quyền đọc file. DTO không trả đường dẫn đĩa; tải xuống dùng attachment, octet-stream, no-store và nosniff. Chưa có upload hoặc màn file portal: thuộc P07/P08.
-
-Storage key nội bộ là thư mục UUID tài khoản + UUID file, không lấy từ tên hiển thị; chặn traversal, absolute path và reparse point. Private storage phải chỉ cho tiến trình ứng dụng/quản trị tin cậy ghi; không public volume qua nginx/static files. Key cũ dạng UUID + extension đơn giản vẫn được đọc; metadata ngoài định dạng hợp lệ bị từ chối, không tự sửa/xóa.
-
-DELETE trả 204 khi đã dọn blob, kể cả retry hoặc blob đã thiếu. Metadata được đánh dấu xóa và quota logical được trừ trong cùng transaction, khóa trên quota của tài khoản. Sau commit mới xóa blob; nếu filesystem lỗi, API trả lỗi yêu cầu thử DELETE cùng ID lần nữa. Tombstone giữ key để cleanup retry và quota chỉ trừ một lần. Khi tiến trình crash giữa hai bước, blob có thể còn trên đĩa nhưng không còn truy cập được qua API; giữ tombstone để vận hành cleanup. Cơ chế reconciliation tự động và upload quota đầy đủ sẽ làm ở P07, chưa có trong P06. File thiếu blob trả 404 khi download; vẫn có thể DELETE metadata. Quota bị lệch/âm phải được kiểm tra trước, không tự clamp để giấu sai dữ liệu.
-
-Kiểm thử FileTests tạo metadata và blob trực tiếp trong PostgreSQL/kho tạm riêng vì upload chưa mở. Không seed file vào kho nghiệp vụ. ApiFactory dọn cả database và thư mục test sau mỗi fixture.
+Trạng thái tính năng trong README này được đối chiếu theo repository ngày 30/10/2026. Cập nhật phần trạng thái sau mỗi thay đổi nghiệp vụ để tài liệu luôn phân biệt rõ chức năng thật, preview và roadmap.
