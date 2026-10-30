@@ -29,3 +29,23 @@ test('non-JSON server failures become readable API errors', async () => {
   const request = createApiClient('/api', () => null, () => {}, async () => new Response('Bad gateway', { status: 502 }));
   await assert.rejects(request('/auth/me'), error => error instanceof ApiError && error.status === 502);
 });
+
+test('late 401 from an older token cannot invalidate a newer login', async () => {
+  const { createApiClient } = await import('../src/api/client.ts');
+  let token = 'old'; let invalidations = 0; let finish;
+  const request = createApiClient('/api', () => token, () => invalidations++, () => new Promise(resolve => { finish = resolve; }));
+  const pending = request('/auth/me'); token = 'new';
+  finish(Response.json({ success: false, message: 'Expired' }, { status: 401 }));
+  await assert.rejects(pending); assert.equal(invalidations, 0);
+});
+
+test('aborted and unauthenticated requests cannot clear an authenticated session', async () => {
+  const { createApiClient } = await import('../src/api/client.ts');
+  let invalidations = 0; const abort = new AbortController();
+  const request = createApiClient('/api', () => 'valid', () => invalidations++, async () => {
+    abort.abort(); return Response.json({ success: false }, { status: 401 });
+  });
+  await assert.rejects(request('/auth/me', { signal: abort.signal })); assert.equal(invalidations, 0);
+  const anonymous = createApiClient('/api', () => null, () => invalidations++, async () => Response.json({ success: false }, { status: 401 }));
+  await assert.rejects(anonymous('/auth/login')); assert.equal(invalidations, 0);
+});

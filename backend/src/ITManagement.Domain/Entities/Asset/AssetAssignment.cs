@@ -19,5 +19,7 @@ public class AssetAssignment : BaseEntity
     public DateTime? ReturnedAt { get; set; }
     public AssignmentStatus Status { get; set; } = AssignmentStatus.Active;
     public string AssignedBy { get; set; } = string.Empty;  // Username của admin
+    public string? ClosedBy { get; set; }
+    public string? CloseNotes { get; set; }
     public string Notes { get; set; } = string.Empty;
 }

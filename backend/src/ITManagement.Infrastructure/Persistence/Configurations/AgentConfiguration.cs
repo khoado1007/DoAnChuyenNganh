@@ -10,7 +10,7 @@ public sealed class RegisteredAgentConfiguration : IEntityTypeConfiguration<Regi
     {
         b.ToTable("agents");
         b.HasKey(x => x.Id);
-        b.HasIndex(x => x.AssetId).IsUnique();
+        b.HasIndex(x => x.AssetId).IsUnique().HasFilter("\"RevokedAt\" IS NULL");
         b.HasIndex(x => x.InstanceId).IsUnique();
         b.HasIndex(x => x.CredentialHash).IsUnique();
         b.Property(x => x.CredentialHash).HasMaxLength(64);
@@ -19,6 +19,7 @@ public sealed class RegisteredAgentConfiguration : IEntityTypeConfiguration<Regi
         b.Property(x => x.Os).HasMaxLength(200);
         b.Property(x => x.Cpu).HasMaxLength(200);
         b.Property(x => x.AgentVersion).HasMaxLength(40);
+        b.Property(x => x.RevokedReason).HasMaxLength(200);
         b.HasOne<Asset>().WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Restrict);
     }
 }

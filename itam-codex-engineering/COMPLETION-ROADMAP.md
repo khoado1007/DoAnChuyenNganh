@@ -1,6 +1,6 @@
 # Kế hoạch hoàn thiện ITAM/ITSM theo từng phiên
 
-Ngày lập: 29/10/2026. Trạng thái: CHỈ LẬP KẾ HOẠCH — chưa cho phép thực thi các phần bên dưới trong phiên hiện tại.
+Ngày lập: 29/10/2026. Trạng thái: ĐANG THỰC HIỆN theo yêu cầu tiếp tục liên tục; xem checkpoint cuối file.
 
 ## 1. Mục tiêu và phạm vi hoàn thiện
 
@@ -37,7 +37,7 @@ Không có dữ liệu đáng tin để quy đổi một chức năng thành s�
 
 Đây là ngưỡng vận hành đề xuất, không phải dự báo tiêu hao. Không đợi đến 0% mới bàn giao. Không kiểm tra quota liên tục: kiểm tra đầu phiên và trước khi nhận thêm việc là đủ.
 
-S = phạm vi nhỏ, ít tầng. M = một lát cắt nghiệp vụ với test. L = có đồng thời/bảo mật/tích hợp nhiều tầng, phải chia A/B nếu limit không đủ. Mỗi lần người dùng gọi chỉ xử lý một mã phần; không tự chạy phần kế tiếp dù còn quota. Không lập automation hoặc tự tiếp tục sau reset.
+S = phạm vi nhỏ, ít tầng. M = một lát cắt nghiệp vụ với test. L = có đồng thời/bảo mật/tích hợp nhiều tầng, phải chia A/B nếu limit không đủ. Theo yêu cầu tiếp tục liên tục, được chuyển phần kế tiếp sau khi kiểm thử/review; vẫn dự trữ quota để bàn giao. Không lập automation hoặc tự tiếp tục sau reset.
 
 ## 4. Các phần thực hiện
 
@@ -73,7 +73,7 @@ S = phạm vi nhỏ, ít tầng. M = một lát cắt nghiệp vụ với test. 
 5. Trong vòng lặp dùng targeted tests. Trước khi bàn giao chạy bộ kiểm thử liên quan và build bị ảnh hưởng; ở các mốc tích hợp chạy toàn suite. Không bỏ test bảo mật/concurrency chỉ để tiết kiệm credit.
 6. Mặc định làm trong một chat/agent. Chỉ review độc lập ở phần rủi ro cao hoặc mốc nghiệm thu khi quy trình áp dụng yêu cầu; không chia nhiều agent cho thao tác nhỏ.
 7. Dự trữ quota cho kiểm thử và checkpoint. Nếu không đủ để hoàn tất an toàn, ghi rõ việc đang dang dở, lỗi còn lại, lệnh cần chạy tiếp; không đánh dấu hoàn thành.
-8. Kết thúc đúng phần được giao. Không tự commit/push/deploy, không tự bắt đầu phần kế tiếp. Chỉ dọn file/process/container do phiên đó tạo và không còn cần; giữ dữ liệu nghiệp vụ.
+8. Chốt kiểm thử từng phần trước khi chuyển tiếp trong phạm vi người dùng đã cho phép. Không tự commit/push/deploy. Chỉ dọn file/process/container do phiên đó tạo và không còn cần; giữ dữ liệu nghiệp vụ.
 
 Lưu ý môi trường đã gặp: sandbox exec từng lỗi khởi tạo; cần dùng cơ chế quyền phù hợp nếu lặp lại. Trên Windows phải dừng API test trước build nếu đang khóa DLL. Có venv ../agent/.venv; `python` trên PATH từng trỏ Store alias. PostgreSQL test cổng 55432 chỉ được tạo khi chạy test; container test và API/Vite tạm đã dọn sau phiên Agent. Không giả định môi trường test đang chạy.
 
@@ -91,10 +91,82 @@ Cập nhật ngay trong mục này, không tạo hàng loạt file status:
 - Việc tiếp theo chính xác: ...
 - Có thể bắt đầu phần kế tiếp chưa: Có/Không, vì ...
 
-Checkpoint hiện tại: Agent enrollment/heartbeat đã hoàn thành theo AGENT-IMPLEMENTATION.md. Roadmap P00–P13B chưa bắt đầu. Phiên tiếp theo nên làm P00 trước; nếu quota thấp chỉ hoàn thành kiểm kê và checkpoint, không chuyển P01.
+Checkpoint hiện tại: P00–P06 đã hoàn thành trong phạm vi từng phần, gồm xác minh recovery P05. Tiếp theo P07A upload/quota nguyên tử. Bằng chứng và giới hạn chi tiết nằm cuối file; không chạy lại các phần từ đầu.
 
 ## 7. Prompt dùng cho lần sau
 
-> Đọc D:/DoAnChuyenNganh/itam-codex-engineering/COMPLETION-ROADMAP.md và checkpoint. Chỉ thực hiện phần P00 trong phiên này, chạy lệnh từ folder itam-codex-engineering. Dùng skill liên quan, bảo toàn thay đổi chưa commit. Kiểm tra limit đầu phiên; dành ngân sách cho test và bàn giao. Hoàn thành hoặc ghi checkpoint phần đang dở rồi dừng; không tự chuyển phần tiếp theo, không commit/push/deploy.
+> Đọc D:/DoAnChuyenNganh/itam-codex-engineering/COMPLETION-ROADMAP.md và checkpoint. Tiếp tục phần chưa hoàn thành ở checkpoint cuối, chạy lệnh từ folder itam-codex-engineering. Dùng skill liên quan, bảo toàn thay đổi chưa commit. Kiểm tra limit đầu phiên; dành ngân sách cho test và bàn giao. Hoàn thành từng phần, kiểm thử rồi chuyển tiếp nếu đủ quota; dự trữ ngân sách để bàn giao, không commit/push/deploy.
 
 Các lần sau thay P00 bằng mã phần kế tiếp chưa hoàn thành. Nếu muốn chỉ lập kế hoạch chi tiết, ghi rõ “chỉ lập kế hoạch, chưa sửa code”.
+
+## Checkpoint 29/10/2026 — tiếp tục liên tục theo yêu cầu mới
+
+- Quyền thực hiện: người dùng yêu cầu “next step do continuous”; cho phép chuyển sang phần kế tiếp sau khi hoàn thành kiểm thử, ghi checkpoint khi cần. Quy định cũ chỉ một phần mỗi phiên được thay thế bởi yêu cầu này.
+- P00 HOÀN THÀNH: HEAD b475252, working tree sạch lúc bắt đầu; README mới đã có trong commit. Không còn các thay đổi chưa commit của phiên Agent. Không xóa source hay các venv người dùng đang dùng.
+- Baseline mới: 20 backend, 13 Python, 3 frontend tests pass; frontend build pass. Còn cảnh báo bundle lớn đã biết.
+- Thêm scripts/Test-Project.ps1: chạy check theo scope all/backend/frontend/agent và trả lỗi khi test/build thất bại. DB integration mặc định cổng 55432, tạo database test riêng qua ApiFactory.
+- PostgreSQL test hiện dùng container itam-roadmap-tests, cổng 55432; không dùng DB nghiệp vụ.
+- P01 ĐANG LÀM: tests cho CRUD giới hạn Employee/Technician, atomic Identity/domain/quota, duplicate race, khóa/mở/đổi role thu hồi token. Không cho chỉnh Admin bootstrap qua endpoint thông thường. Thêm SecurityVersion vào AppUser và JWT; kiểm tra DB mỗi request để từ chối token cũ ngay sau thay đổi đã commit. JWT phiên trước migration không có version sẽ cần đăng nhập lại.
+- P01 HOÀN THÀNH: 25/25 backend tests pass; migration UserSecurityVersion; UserService và UsersController; JWT kiểm tra domain user và version mỗi request. Thao tác Admin bootstrap bị chặn trong API quản lý nội bộ.
+- P02 HOÀN THÀNH: 4/4 frontend tests, build pass; browser smoke tạo/sửa/khóa/mở/đổi role, token cũ bị thu hồi, Employee/Technician portals, URL/reload/truy cập chéo/logout/mobile đều pass. Màn users lấy dữ liệu API thật. Profile portals chưa có nghiệp vụ files/tickets.
+- Review độc lập P01/P02: không có Critical/Important. Minor để bổ sung sau: giữ deep link khi login từ trạng thái chưa đăng nhập; test email duplicate độc lập với username; thêm ma trận PUT và Technician RBAC. Chính sách controller đã áp dụng cho mọi method nhưng những trường hợp này chưa có test riêng.
+- P03 ĐANG LÀM: giữ GET /api/assets tương thích Agent; thêm /api/assets/search và /api/assets/{id}; chuyển asset CRUD ra service riêng. Không cho đặt Assigned trực tiếp; Retired là trạng thái cuối. Cấp phát/trả dùng P04.
+
+## Checkpoint 30/10/2026 — P04 cấp phát
+
+P03 HOÀN THÀNH theo bằng chứng phiên trước: 27 backend + 13 Python + 4 frontend tests, frontend build, smoke tài sản/Agent và Python E2E pass. Các kết quả đó là lịch sử; chạy lại sau thay đổi P04.
+
+Kế hoạch thực thi inline (writing-plans, executing-plans, TDD):
+- [ ] P04A: AssignmentTests xác nhận API chưa có; thêm AssignmentContracts, IAssignmentService, AssignmentService và AssignmentsController. Admin assign/return/revoke/history; Employee GET /api/me/assets lấy owner từ JWT.
+- [ ] Migration bổ sung ClosedBy/CloseNotes và unique filtered AssetId khi Status=Active; giữ nguyên dữ liệu cũ, không xóa lịch sử. Khóa asset row trong transaction, khóa recipient khi xác nhận active Employee. Request return/revoke bắt buộc assignmentId để tránh request cũ đóng cấp phát mới.
+- [ ] Kiểm thử race assign, double close, stale request, locked recipient, lifecycle và quyền; chạy backend suite.
+- [ ] P04B: modal cấp phát/lịch sử trong AssetsPage, bảng tài sản của tôi trong PortalPage; browser smoke assign -> owner thấy -> return/revoke -> reload.
+- [ ] Review, full checks, ghi checkpoint. Không commit/push/deploy.
+
+Quyết định: chỉ Employee active nhận tài sản trong scope này; Admin xác nhận trả/thu hồi. Phiếu đã đóng không được sửa; ghi chú cấp và ghi chú đóng tách riêng. Không đổi trạng thái Agent khi trả tài sản.
+
+
+### P04A/P04B — kết quả 30/10/2026
+
+- HOÀN THÀNH chức năng: Admin cấp/trả/thu hồi/xem lịch sử; Employee xem tài sản đang cấp qua JWT. Lịch sử đóng giữ người thao tác, thời gian và ghi chú riêng; không có API sửa/xóa lịch sử.
+- Backend mới: AssignmentContracts, IAssignmentService, AssignmentService, AssignmentsController/MyAssetsController, AssetAssignmentConfiguration và migration AssetAssignmentLifecycle. Khóa asset + recipient trong transaction; partial unique index Status=Active; FK Restrict bảo vệ lịch sử. Không đổi policy/connectivity Agent khi trả tài sản.
+- UI mới: AssignmentModal, MyAssets, type assignment; nối AssetsPage/PortalPage. Modal tải asset detail độc lập để hoạt động đúng khi trả tài sản làm dòng biến mất khỏi bộ lọc Assigned.
+- Test-first: AssignmentTests ban đầu 404; fixture Department thiếu đã sửa trước khi ghi nhận red đúng. Sau implementation, backend 29/29 pass. Browser smoke ban đầu thiếu nút cấp phát, sau implementation pass; review phát hiện bug filter Assigned, regression red được tái hiện rồi green sau sửa.
+- Toàn suite `./scripts/Test-Project.ps1`: 29 backend + 13 Python + 4 frontend tests pass, frontend build pass. Sau fix UI chạy lại scope frontend và smoke cấp phát; kết quả cuối ghi bên dưới. EF has-pending-model-changes: không có thay đổi model thiếu migration.
+- Review độc lập: không Critical; một Important UI filter đã sửa và có regression. Minor hoãn: test riêng cho recipient Technician/Admin, return/revoke đồng thời, lịch sử sau soft-delete account. Những nhánh này chưa có assertion riêng; không tuyên bố đã kiểm thử chúng.
+- Minor P01/P02 còn như checkpoint trước: deep link login, duplicate email khác username, ma trận PUT/Technician. Cảnh báo bundle lớn và EF global-filter trên required navigation còn tồn tại.
+- Quyết định phạm vi: chỉ Employee Active nhận tài sản, Admin xác nhận trả/thu hồi; nếu cần Technician nhận tài sản phải mở rộng contract có chủ đích. Dữ liệu lịch sử active trùng do nhập tay sẽ khiến migration từ chối, không tự xóa để ép migration thành công.
+- Quota tại quyết định chốt: 74% đã dùng cửa sổ 5h, còn 26%; tuần còn 59%. Không bắt đầu P05 để giữ ngân sách xác minh/bàn giao. Người dùng đã cho phép tiếp tục liên tục, không cần hỏi lại quyền ở phiên tiếp theo.
+- Tiếp theo chính xác: P05 phục hồi Agent khi mất state/response enrollment, dùng architecture-guardian + aspnet-api + python-agent + quality-gates + react-ui. Chưa sửa code recovery. Sau đó P06/P07 kho file/quota; phần còn lại theo bảng roadmap.
+- Không commit/push/deploy. Giữ toàn bộ thay đổi P00–P04 chưa commit và venv của người dùng.
+- Xác minh cuối sau review fix: `./scripts/Test-Project.ps1 -Scope frontend` 4/4 tests và build pass; `node ../frontend/admin/tests/assignments/smoke.cjs` pass cả filter Assigned, mobile, return/reassign/revoke. `git diff --check` đã xử lý blank EOF.
+- Môi trường: API/Vite E2E đã dừng; container test itam-roadmap-tests đã dừng (giữ DB E2E trong container để có thể tái sử dụng). Không đụng DB nghiệp vụ. Chỉ xóa log tạm của các phiên kiểm thử này; không xóa source/venv.
+
+## Phiên tiếp tục sau phần recovery
+
+Phạm vi theo yêu cầu mới: làm trọn từng phần, kiểm thử và ghi checkpoint trước chuyển phần kế tiếp. Bảo toàn code P05 đã được bổ sung ngoài checkpoint cũ.
+
+P06 design/plan (chỉ bắt đầu implementation sau khi xác minh P05):
+- API Employee GET /api/files (phân trang), GET /api/files/{id}/download, DELETE /api/files/{id}. Không có upload trước P07; không thêm UI trước P08. DTO không lộ StoragePath/quota ID.
+- FilesController mỏng -> IFileService/FileService; owner lấy từ ICurrentUserService. Cross-owner/nonexistent trả 404. Download attachment + octet-stream + no-store/nosniff; tên file chỉ là metadata.
+- LocalFileStorageService chỉ nhận key gồm owner UUID + opaque UUID (cho phép đuôi extension đơn giản của schema cũ); chặn absolute/traversal/reparse point; Save không lấy extension từ display filename, cleanup file dở khi thất bại.
+- Delete: khóa quota rồi metadata, IsDeleted + UsedBytes cập nhật cùng transaction. Commit rồi xóa blob; metadata tombstone giữ key để DELETE retry cleanup, không double release. Missing blob có thể xóa metadata nhất quán; lỗi I/O sau commit trả lỗi có thể retry. Quota đo dung lượng logical của file còn hoạt động; cleanup orphan định kỳ thuộc P07B.
+- Tests trước implementation: API owner/private DTO/anonymous/Agent, concurrent delete/quota không âm, missing blob, traversal/cross-owner storage key; storage filename độc hại, key invalid và cleanup cancelled save. DB và thư mục test riêng.
+- Chạy targeted red -> green, whole backend + Python/frontend checks; review độc lập phần quyền/storage. Không mở P07 nếu chưa chốt P06 hoặc thiếu quota dự trữ.
+
+P05 đã xác minh và chốt trước khi chuyển P06: code recovery do người dùng bổ sung được giữ nguyên. Full checks: 31 backend + 14 Python + 4 frontend pass, build pass. Browser smoke recovery pass (old credential 403, identity mới enroll/heartbeat, giữ hai bản ghi lịch sử, mobile/error UI). Sửa smoke dùng mode Real khớp token và locator chấp nhận lịch sử trùng asset code; bổ sung hướng dẫn re-enroll, mất response/state trong agent/README.md. Không còn coi P05 là chưa làm. Bắt đầu P06 theo thiết kế ngay phía trên.
+
+### P06 — checkpoint triển khai
+
+- Đã chốt P05 trước khi viết P06, theo yêu cầu hoàn thành tuần tự. P05: giữ implementation recovery hiện có; bổ sung tài liệu và sửa smoke cũ, full checks + recovery UI pass.
+- P06: FilesController + FileContracts/IFileService/FileService; Employee list/download/delete theo owner JWT; không lộ StoragePath, file tải dưới dạng attachment octet-stream no-store/nosniff. Không có upload/UI trong phần này.
+- LocalFileStorageService dùng key UUID, bỏ phụ thuộc tên hiển thị, chặn key absolute/traversal/reparse; cleanup save khi lỗi/hủy. ApiFactory có kho tạm riêng và cleanup fixture.
+- Delete khóa quota và atomically đánh dấu metadata IsDeleted/trừ UsedBytes; giữ tombstone cho retry cleanup filesystem. Retry không double release. Không tự xóa dữ liệu khi quota lệch. Blob thiếu trả 404 download nhưng vẫn xóa metadata được; key trỏ owner khác bị từ chối.
+- Tests: 7 tests đầu red trước implementation, rồi green; bổ sung failure injection delete sau commit và cancelled save. Review phát hiện nhánh ExistsAsync IOException có thể lộ path trên Development; thêm regression red, sửa sanitization, đang thu kết quả whole backend cuối.
+- Full checks trước review fix: 40 backend + 14 Python + 4 frontend pass; build pass. Backend được chạy lại sau review fix. No new DB model/migration trong P06.
+- Quyết định: quota tính file logical còn active, blob tombstone có thể tạm còn trên disk khi crash/I/O lỗi; retry DELETE để cleanup. Reconciliation tự động thuộc P07B. Đĩa private chỉ cho ứng dụng/admin tin cậy ghi, không public static volume.
+- Review minor còn thiếu: test tạo symlink/junction thật (đã có kiểm tra reparse trong code và tests key traversal; không tuyên bố đã kiểm thử junction). Các minor P01/P04 và cảnh báo bundle/EF trước đó giữ nguyên.
+- Quota tại quyết định chốt: 75% dùng cửa sổ 5h, còn 25%; tuần còn 45%. Không bắt đầu P07A để tránh dang dở. Sau P06, bước kế tiếp là P07A upload/quota nguyên tử, rồi P07B recovery/quota Admin; P08 mới làm UI file.
+- Không commit/push/deploy; giữ thay đổi của người dùng và toàn bộ phần trước.
+- P06 HOÀN THÀNH: backend cuối 41/41 pass (`./scripts/Test-Project.ps1 -Scope backend`, exit 0), gồm regression storage validation và failure injection. Python 14/14, frontend 4/4 + build pass trong full check; không đổi Python/frontend product code sau full check. `git diff --check` sạch. Review Important đã xử lý, minor junction test ghi rõ ở trên.
+- API/Vite test đã dừng sau xác minh P05; container itam-roadmap-tests dừng cuối phiên. Chỉ dọn log của phiên này, giữ DB E2E trong container và source/venv. Điểm tiếp tục: P07A, không làm lại P05/P06.

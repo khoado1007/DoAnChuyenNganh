@@ -23,7 +23,7 @@ public sealed class AuthService(UserManager<IdentityUser> userManager, IUserRepo
         var user = await users.GetByIdentityIdAsync(identity.Id, ct);
         if (user is null || user.Status != UserStatus.Active) throw InvalidCredentials();
 
-        var token = jwt.GenerateAccessToken(user.Id, user.Username, user.Role.ToString(), user.Email);
+        var token = jwt.GenerateAccessToken(user.Id, user.Username, user.Role.ToString(), user.Email, user.SecurityVersion);
         return new AuthResponse(token, UserResponse.From(user));
     }
 

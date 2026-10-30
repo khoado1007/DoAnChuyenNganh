@@ -33,8 +33,18 @@ public sealed class AgentService(AppDbContext db, TimeProvider clock) : IAgentSe
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await LockAsset(request.AssetId, ct);
-        if (await db.Agents.AnyAsync(a => a.AssetId == request.AssetId, ct))
-            throw new BusinessRuleException("Tài sản đã có Agent; không tự động thay credential.");
+        var activeAgent = await db.Agents.SingleOrDefaultAsync(a => a.AssetId == request.AssetId && a.RevokedAt == null, ct);
+        if (activeAgent is not null)
+        {
+            if (!request.ReplaceExisting)
+                throw new BusinessRuleException("Tài sản đã có Agent; không tự động thay credential.");
+
+            var nowUtc = Now;
+            activeAgent.RevokedAt = nowUtc;
+            activeAgent.RevokedReason = string.IsNullOrWhiteSpace(request.Reason) ? "Thay thế bởi quản trị viên" : request.Reason;
+            if (activeAgent.DisabledAt is null) activeAgent.DisabledAt = nowUtc;
+        }
+
         var now = Now;
         await db.EnrollmentTokens.Where(t => t.AssetId == request.AssetId && t.ConsumedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.ExpiresAt, now), ct);
@@ -45,6 +55,9 @@ public sealed class AgentService(AppDbContext db, TimeProvider clock) : IAgentSe
         await tx.CommitAsync(ct);
         return new(secret, token.ExpiresAt);
     }
+
+    public Task<EnrollmentIssued> IssueRecoveryAsync(IssueRecoveryRequest request, CancellationToken ct)
+        => IssueAsync(new IssueEnrollmentRequest(request.AssetId, request.Mode, ReplaceExisting: true, Reason: request.Reason), ct);
 
     public async Task<AgentEnrolled> EnrollAsync(EnrollRequest request, CancellationToken ct)
     {
@@ -58,8 +71,8 @@ public sealed class AgentService(AppDbContext db, TimeProvider clock) : IAgentSe
         var consumed = await db.EnrollmentTokens.Where(t => t.Id == token.Id && t.ConsumedAt == null && t.ExpiresAt > now && t.Mode == request.Mode)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.ConsumedAt, now), ct);
         if (consumed != 1) throw Invalid();
-        if (await db.Agents.AnyAsync(a => a.AssetId == token.AssetId || a.InstanceId == request.InstanceId, ct))
-            throw new BusinessRuleException("Tài sản hoặc instance đã được đăng ký.");
+        if (await db.Agents.AnyAsync(a => (a.AssetId == token.AssetId && a.RevokedAt == null) || (a.InstanceId == request.InstanceId && a.RevokedAt == null), ct))
+            throw new BusinessRuleException("Tài sản hoặc instance đã có Agent đang hoạt động.");
         var credential = Secret();
         var agent = new RegisteredAgent { AssetId = token.AssetId, InstanceId = request.InstanceId, Mode = token.Mode, CredentialHash = Hash(credential), CreatedAt = now };
         db.Agents.Add(agent);
@@ -77,6 +90,7 @@ public sealed class AgentService(AppDbContext db, TimeProvider clock) : IAgentSe
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var agent = await db.Agents.FromSqlInterpolated($"SELECT * FROM agents WHERE \"CredentialHash\" = {hash} FOR UPDATE").SingleOrDefaultAsync(ct);
         if (agent is null) throw Invalid();
+        if (agent.RevokedAt is not null) throw new UnauthorizedException("Agent đã bị thu hồi hoặc thay thế.");
         if (agent.DisabledAt is not null) throw new UnauthorizedException("Agent đã bị vô hiệu hóa.");
         if (!await db.Assets.AnyAsync(a => a.Id == agent.AssetId && a.Status != AssetStatus.Disabled && a.Status != AssetStatus.Retired, ct))
             throw new UnauthorizedException("Tài sản không cho phép heartbeat.");
@@ -103,9 +117,10 @@ public sealed class AgentService(AppDbContext db, TimeProvider clock) : IAgentSe
                       join asset in db.Assets.IgnoreQueryFilters() on a.AssetId equals asset.Id
                       orderby a.CreatedAt descending
                       select new AgentResponse(a.Id, a.AssetId, a.InstanceId, asset.AssetCode, asset.Status.ToString(), a.Mode,
-                          a.DisabledAt == null ? "active" : "disabled",
-                          a.LastSeenAt != null && a.LastSeenAt > threshold ? "online" : "offline", a.LastSeenAt,
-                          a.Hostname, a.Os, a.Cpu, a.RamBytes, a.AgentVersion)).ToListAsync(ct);
+                          a.RevokedAt != null ? "revoked" : (a.DisabledAt == null ? "active" : "disabled"),
+                          a.RevokedAt == null && a.LastSeenAt != null && a.LastSeenAt > threshold ? "online" : "offline", a.LastSeenAt,
+                          a.Hostname, a.Os, a.Cpu, a.RamBytes, a.AgentVersion,
+                          a.RevokedAt, a.RevokedReason)).ToListAsync(ct);
     }
 
     public async Task DisableAsync(Guid id, CancellationToken ct)
@@ -115,18 +130,4 @@ public sealed class AgentService(AppDbContext db, TimeProvider clock) : IAgentSe
         var count = await db.Agents.Where(a => a.Id == id).ExecuteUpdateAsync(s => s.SetProperty(a => a.DisabledAt, a => a.DisabledAt ?? now), ct);
         if (count == 0) throw new NotFoundException("Agent", id);
     }
-
-    public async Task<AgentAssetResponse> CreateAssetAsync(CreateAgentAssetRequest request, CancellationToken ct)
-    {
-        var asset = new Asset { AssetCode = request.AssetCode.Trim(), Name = request.Name.Trim(), Type = AssetType.Desktop };
-        db.Assets.Add(asset);
-        try { await db.SaveChangesAsync(ct); }
-        catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
-        { throw new BusinessRuleException("Mã tài sản đã tồn tại."); }
-        return new(asset.Id, asset.AssetCode, asset.Name, asset.Status.ToString());
-    }
-
-    public async Task<IReadOnlyList<AgentAssetResponse>> ListAssetsAsync(CancellationToken ct) =>
-        await db.Assets.AsNoTracking().OrderBy(a => a.AssetCode)
-            .Select(a => new AgentAssetResponse(a.Id, a.AssetCode, a.Name, a.Status.ToString())).ToListAsync(ct);
 }

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { ConfigProvider } from 'antd';
 import viVN from 'antd/locale/vi_VN';
 import App from './App';
+import PageBoundary from './PageBoundary';
 import '@fontsource/noto-serif/400.css';
 import '@fontsource/noto-serif/600.css';
 import '@fontsource/noto-serif/700.css';
@@ -36,7 +37,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         },
       }}
     >
-      <App />
+      <PageBoundary><App /></PageBoundary>
     </ConfigProvider>
   </React.StrictMode>,
 );
+

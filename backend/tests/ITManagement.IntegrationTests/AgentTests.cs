@@ -77,7 +77,15 @@ public class AgentTests : IClassFixture<ApiFactory>
     {
         using var client = factory.CreateClient();
         using var scope = factory.Services.CreateScope();
-        var jwt = scope.ServiceProvider.GetRequiredService<IJwtService>().GenerateAccessToken(Guid.NewGuid(), "test", role, "test@example.test");
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = new ITManagement.Domain.Entities.User.AppUser
+        {
+            Username = "rbac" + Guid.NewGuid().ToString("N"), Email = Guid.NewGuid() + "@example.test",
+            FullName = "RBAC test", Role = Enum.Parse<ITManagement.Domain.Enums.UserRole>(role)
+        };
+        db.AppUsers.Add(user);
+        await db.SaveChangesAsync();
+        var jwt = scope.ServiceProvider.GetRequiredService<IJwtService>().GenerateAccessToken(user.Id, user.Username, role, user.Email);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/agents")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/agents/enrollment-tokens", new { assetId = Guid.NewGuid(), mode = "real" })).StatusCode);
@@ -171,6 +179,82 @@ public class AgentTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Admin_can_reissue_recovery_token_which_revokes_old_agent_and_rejects_old_credential()
+    {
+        using var admin = await Admin();
+        var issued1 = await Issue(admin, "real");
+        using var agent1 = factory.CreateClient();
+        var id1 = Guid.NewGuid();
+        var enrolled1 = await Data(await agent1.PostAsJsonAsync("/api/agents/enroll", new { token = issued1.Token, instanceId = id1, mode = "real", protocolVersion = 1 }));
+        agent1.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Agent", enrolled1.GetProperty("credential").GetString());
+        var payload1 = new { sequence = 1L, protocolVersion = 1, hostname = "HOST-REAL", os = "Linux", cpu = "Intel", ramBytes = 8192L, agentVersion = "1.0.0" };
+        await Data(await agent1.PostAsJsonAsync("/api/agents/heartbeat", payload1));
+
+        // Normal enrollment-token request without ReplaceExisting fails
+        var failIssue = await admin.PostAsJsonAsync("/api/agents/enrollment-tokens", new { assetId = issued1.AssetId, mode = "simulated" });
+        Assert.Equal(HttpStatusCode.BadRequest, failIssue.StatusCode);
+
+        // Recovery token succeeds and issues new single-use token
+        var recoveryResponse = await admin.PostAsJsonAsync("/api/agents/recovery-tokens", new { assetId = issued1.AssetId, mode = "simulated", reason = "Machine reinstalled" });
+        var recoveryTokenData = await Data(recoveryResponse);
+        var recoveryToken = recoveryTokenData.GetProperty("token").GetString()!;
+        Assert.Equal(64, recoveryToken.Length);
+
+        // Old agent heartbeat is immediately rejected
+        var staleHeartbeat = await agent1.PostAsJsonAsync("/api/agents/heartbeat", payload1 with { sequence = 2L });
+        Assert.Equal(HttpStatusCode.Forbidden, staleHeartbeat.StatusCode);
+
+        // New agent enrolls with the recovery token
+        using var agent2 = factory.CreateClient();
+        var id2 = Guid.NewGuid();
+        var enrolled2 = await Data(await agent2.PostAsJsonAsync("/api/agents/enroll", new { token = recoveryToken, instanceId = id2, mode = "simulated", protocolVersion = 1 }));
+        agent2.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Agent", enrolled2.GetProperty("credential").GetString());
+        var payload2 = new { sequence = 1L, protocolVersion = 1, hostname = "HOST-SIM", os = "Windows", cpu = "AMD", ramBytes = 16384L, agentVersion = "1.0.0" };
+        await Data(await agent2.PostAsJsonAsync("/api/agents/heartbeat", payload2));
+
+        // Verify list returns both agents with distinct policies, modes, and connectivity
+        var list = await Data(await admin.GetAsync("/api/agents"));
+        var rows = list.EnumerateArray().Where(a => a.GetProperty("assetId").GetGuid() == issued1.AssetId).ToList();
+        Assert.Equal(2, rows.Count);
+
+        var oldRow = rows.Single(r => r.GetProperty("instanceId").GetGuid() == id1);
+        Assert.Equal("revoked", oldRow.GetProperty("policy").GetString());
+        Assert.Equal("offline", oldRow.GetProperty("connectivity").GetString());
+        Assert.Equal("real", oldRow.GetProperty("mode").GetString());
+        Assert.Equal("Machine reinstalled", oldRow.GetProperty("revokedReason").GetString());
+        Assert.True(oldRow.GetProperty("revokedAt").GetString() is not null);
+
+        var newRow = rows.Single(r => r.GetProperty("instanceId").GetGuid() == id2);
+        Assert.Equal("active", newRow.GetProperty("policy").GetString());
+        Assert.Equal("online", newRow.GetProperty("connectivity").GetString());
+        Assert.Equal("simulated", newRow.GetProperty("mode").GetString());
+        Assert.Null(newRow.GetProperty("revokedAt").GetString());
+    }
+
+    [Fact]
+    public async Task Recovery_token_is_single_use_and_concurrent_enrollment_only_registers_one()
+    {
+        using var admin = await Admin();
+        var issued1 = await Issue(admin, "real");
+        using var agent1 = factory.CreateClient();
+        await Data(await agent1.PostAsJsonAsync("/api/agents/enroll", new { token = issued1.Token, instanceId = Guid.NewGuid(), mode = "real", protocolVersion = 1 }));
+
+        var recovery = await Data(await admin.PostAsJsonAsync("/api/agents/recovery-tokens", new { assetId = issued1.AssetId, mode = "real", reason = "Recovery concurrency test" }));
+        var recoveryToken = recovery.GetProperty("token").GetString()!;
+
+        using var client = factory.CreateClient();
+        var responses = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => client.PostAsJsonAsync("/api/agents/enroll",
+            new { token = recoveryToken, instanceId = Guid.NewGuid(), mode = "real", protocolVersion = 1 })));
+        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.OK);
+        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.Unauthorized);
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var activeAgents = await db.Agents.Where(a => a.AssetId == issued1.AssetId && a.RevokedAt == null).ToListAsync();
+        Assert.Single(activeAgents);
+    }
+
+    [Fact]
     public async Task Swagger_documents_agent_credential_separately_from_user_bearer()
     {
         using var client = factory.CreateClient();
@@ -178,6 +262,7 @@ public class AgentTests : IClassFixture<ApiFactory>
         var paths = document.GetProperty("paths");
         Assert.True(paths.GetProperty("/api/agents/heartbeat").GetProperty("post").GetProperty("security")[0].TryGetProperty("Agent", out _));
         Assert.Empty(paths.GetProperty("/api/agents/enroll").GetProperty("post").GetProperty("security")[0].EnumerateObject());
+        Assert.True(paths.TryGetProperty("/api/agents/recovery-tokens", out _));
     }}
 
 public class AgentRateLimitTests

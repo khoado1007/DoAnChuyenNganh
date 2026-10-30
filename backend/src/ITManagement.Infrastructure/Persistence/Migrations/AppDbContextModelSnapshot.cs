@@ -116,10 +116,18 @@ namespace ITManagement.Infrastructure.Persistence.Migrations
                     b.Property<long>("RamBytes")
                         .HasColumnType("bigint");
 
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RevokedReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AssetId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"RevokedAt\" IS NULL");
 
                     b.HasIndex("CredentialHash")
                         .IsUnique();
@@ -224,6 +232,12 @@ namespace ITManagement.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("CloseNotes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ClosedBy")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -254,7 +268,9 @@ namespace ITManagement.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AssetId");
+                    b.HasIndex("AssetId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 1");
 
                     b.HasIndex("UserId");
 
@@ -559,6 +575,9 @@ namespace ITManagement.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("SecurityVersion")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
@@ -804,13 +823,13 @@ namespace ITManagement.Infrastructure.Persistence.Migrations
                     b.HasOne("ITManagement.Domain.Entities.Asset.Asset", "Asset")
                         .WithMany("Assignments")
                         .HasForeignKey("AssetId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("ITManagement.Domain.Entities.User.AppUser", "User")
                         .WithMany("AssetAssignments")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Asset");

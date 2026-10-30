@@ -40,6 +40,51 @@ def test_enrollment_is_not_retried_and_credentials_are_scoped(tmp_path):
     assert 'one-use' not in (tmp_path / 'state.json').read_text()
 
 
+def test_recovery_re_enroll_rotates_instance_id_and_updates_credentials(tmp_path):
+    enrollments = [
+        dict(agentId='agent-1', credential='secret-1', heartbeatIntervalSeconds=30),
+        dict(agentId='agent-2', credential='secret-2', heartbeatIntervalSeconds=30),
+    ]
+    instances_seen = []
+    tokens_seen = []
+
+    def transport(path, body, credential):
+        if path == '/api/agents/enroll':
+            instances_seen.append(body['instanceId'])
+            tokens_seen.append(body['token'])
+            return enrollments.pop(0)
+        return dict(lastSeenAt=None, lastSequence=body['sequence'])
+
+    agent = Agent(config(tmp_path), transport=transport)
+    agent.enroll('token-initial')
+    first_instance = agent.state['instanceId']
+    assert agent.state['credential'] == 'secret-1'
+
+    # Cannot overwrite with standard enroll
+    with pytest.raises(ValueError):
+        agent.enroll('token-recovery')
+
+    # Re-enroll resets instance ID and updates credential
+    agent.re_enroll('token-recovery')
+    second_instance = agent.state['instanceId']
+    assert first_instance != second_instance
+    assert tokens_seen == ['token-initial', 'token-recovery']
+    assert instances_seen == [first_instance, second_instance]
+    assert agent.state['credential'] == 'secret-2'
+    assert agent.state['agentId'] == 'agent-2'
+    assert agent.state['revoked'] is False
+
+    # New credential sends heartbeats successfully
+    heartbeat_credentials = []
+    def heartbeat_transport(path, body, credential):
+        heartbeat_credentials.append(credential)
+        return dict(lastSeenAt=None, lastSequence=body['sequence'])
+
+    agent.transport = heartbeat_transport
+    agent.heartbeat()
+    assert heartbeat_credentials == ['secret-2']
+
+
 def test_retry_reuses_sequence_and_disable_stops(tmp_path):
     outcomes = [TimeoutError(), {}, ProtocolError(403)]
     seen = []

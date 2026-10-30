@@ -37,7 +37,7 @@ Mọi response dùng envelope `success/message/data/errors`. OpenAPI tại `/swa
 | GET `/api/agents` | Admin; mode, policy, connectivity, assetStatus, lastSeenAt và inventory |
 | POST `/api/agents/{id}/disable` | Admin; từ chối heartbeat sau khi disable hoàn tất, giữ snapshot trước đó |
 
-Token/credential trong database chỉ là SHA-256 của secret ngẫu nhiên 256 bit. Agent credential không đăng nhập được như người dùng. Mỗi tài sản chỉ có một Agent; mỗi instance ID là duy nhất. Token được tiêu thụ trong transaction cùng lúc tạo Agent. Enrollment không retry tự động: nếu server đã hoàn tất nhưng response/ghi state thất bại, cần quản trị xử lý cấp lại; UI thay credential/tái đăng ký chưa nằm trong đợt này.
+Token/credential trong database chỉ là SHA-256 của secret ngẫu nhiên 256 bit. Agent credential không đăng nhập được như người dùng. Mỗi tài sản chỉ có một Agent chưa revoked; các Agent cũ được giữ làm lịch sử, mỗi instance ID là duy nhất. Token được tiêu thụ trong transaction cùng lúc tạo Agent. Enrollment không retry tự động: nếu server đã hoàn tất nhưng response/ghi state thất bại, cần quản trị xử lý cấp lại; dùng luồng Phục hồi mô tả bên dưới.
 
 Server dùng UTC; sequence trùng/cũ không cập nhật last-seen hoặc inventory. Online khi heartbeat mới nhất cách hiện tại <90 giây. Offline không tự đổi tài sản sang retired; disabled là chính sách độc lập, vì vậy Agent vừa bị disable có thể còn hiển thị Online đến hết ngưỡng. Snapshot inventory gần nhất được giữ, chưa có bảng lịch sử từng heartbeat. Giới hạn theo IP: 20 enrollment/phút, 120 heartbeat/phút; cụm nhiều Agent sau cùng NAT cần điều chỉnh trước triển khai lớn.
 
@@ -60,3 +60,17 @@ Live smoke: khởi chạy API Development trên `127.0.0.1:5189`, trỏ `Connect
 ```
 
 UI smoke: Vite cổng 5190 với `API_PROXY_TARGET=http://127.0.0.1:5189`, cần Playwright và Edge. Đặt `PLAYWRIGHT_MODULE` tới module Playwright nếu không có trong node_modules; chạy `node ../frontend/admin/tests/agents/smoke.cjs`. Có thể đặt `ITAM_UI_URL` và `ITAM_SCREENSHOT`. Smoke test tạo bản ghi test thật, chỉ chạy trên database dùng thử. Các bài kiểm thử allocation/files/quota/tickets không thuộc thay đổi này.
+
+## Phục hồi sau khi mất state hoặc response đăng ký
+
+Admin mở Agent → **Cấp lại / Phục hồi**, chọn đúng Real/Simulated và nhập lý do. POST `/api/agents/recovery-tokens` nhận `{assetId, mode, reason}`. Ngay khi cấp token, identity cũ bị thu hồi vĩnh viễn, credential cũ bị từ chối; bản ghi, lý do và snapshot cũ vẫn giữ. Token mới có hạn 15 phút và dùng một lần; cấp lại token sẽ hủy token chưa dùng trước đó.
+
+Dừng instance cũ. Nếu còn state, chạy từ folder `itam-codex-engineering`:
+
+```powershell
+../agent/.venv/Scripts/python.exe ../agent/itam_agent.py re-enroll --server http://127.0.0.1:5038 --mode simulated --state ../agent/.state/simulated.json
+```
+
+Dùng đúng đường dẫn state của instance và đúng mode đã chọn trên UI; Real cần thêm `--consent-inventory`. Token nhập tại lời nhắc, không truyền trên command line. `re-enroll` tạo instance ID mới và xóa credential/pending/sequence cũ trước khi gửi yêu cầu. Nếu state mất hoàn toàn, dùng `enroll` với đường dẫn state mới. Không chạy hai instance trên cùng state.
+
+Nếu response bị mất hoặc không ghi được state sau khi máy chủ đã đăng ký: không tự retry token cũ; Admin cấp token recovery mới rồi thực hiện lại. Token sai/hết hạn cũng cần cấp lại. Tái đăng ký không thay đổi chủ sở hữu tài sản hoặc dữ liệu tài khoản. Migration recovery giữ nhiều Agent lịch sử trên một tài sản, chỉ một Agent chưa revoked; không downgrade migration về unique AssetId khi đã có lịch sử thay thế mà chưa lập kế hoạch chuyển dữ liệu.

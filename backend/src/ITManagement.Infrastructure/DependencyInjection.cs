@@ -48,8 +48,12 @@ public static class DependencyInjection
 
         // Services
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IAssetService, AssetService>();
+        services.AddScoped<IAssignmentService, AssignmentService>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IFileStorageService, LocalFileStorageService>();
+        services.AddScoped<IFileService, FileService>();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
 

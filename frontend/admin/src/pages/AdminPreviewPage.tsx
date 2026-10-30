@@ -1,8 +1,10 @@
-import AgentsPage from './AgentsPage';
+const AssetsPage = lazy(() => import('./AssetsPage'));
+const UsersPage = lazy(() => import('./UsersPage'));
+const AgentsPage = lazy(() => import('./AgentsPage'));
 import AdminLayout from '../layouts/AdminLayout';
 import type { Section } from '../layouts/AdminLayout';
 import type { UserResponse } from '../types/auth';
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -95,8 +97,8 @@ function StatusTag({ status }: { status: Row['status'] }) {
   return <Tag color={colors[status]}>{status}</Tag>;
 }
 
-function AdminPreviewPage({ user, onLogout }: { user: UserResponse; onLogout: () => void }) {
-  const [section, setSection] = useState<Section>('overview');
+function AdminPreviewPage({ user, onLogout, section, setSection }: { user: UserResponse; onLogout: () => void; section: Section; setSection: (section: Section) => void }) {
+
   const [query, setQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [assets, setAssets] = useState(initialAssets);
@@ -148,7 +150,8 @@ function AdminPreviewPage({ user, onLogout }: { user: UserResponse; onLogout: ()
   const title = titles[section];
   const createLabel = section === 'assets' ? 'Thêm tài sản' : section === 'users' ? 'Thêm tài khoản' : 'Tạo yêu cầu';
 
-  if (section === 'agents') return <AdminLayout user={user} onLogout={onLogout} section={section} title={title.title} onSectionChange={setSection}><AgentsPage /></AdminLayout>;
+  const livePage = section === 'users' ? <UsersPage /> : section === 'agents' ? <AgentsPage /> : section === 'assets' ? <AssetsPage /> : null;
+  if (livePage) return <AdminLayout user={user} onLogout={onLogout} section={section} title={title.title} onSectionChange={setSection}><Suspense fallback={<p role="status">Đang tải trang…</p>}>{livePage}</Suspense></AdminLayout>;
 
   return (
     <>
@@ -204,3 +207,4 @@ function AdminPreviewPage({ user, onLogout }: { user: UserResponse; onLogout: ()
 }
 
 export default AdminPreviewPage;
+

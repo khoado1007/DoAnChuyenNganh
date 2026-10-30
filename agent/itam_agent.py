@@ -138,6 +138,11 @@ class Agent:
         self.state.update(credential=result['credential'], agentId=result['agentId'])
         self._save()
 
+    def re_enroll(self, token: str):
+        self.state.update(instanceId=str(uuid.uuid4()), credential=None, pending=None, sequence=0, revoked=False)
+        self._save()
+        return self.enroll(token)
+
     def heartbeat(self):
         if self.state['revoked'] or not self.state['credential']:
             raise ValueError('Agent is revoked or has not enrolled.')
@@ -199,7 +204,7 @@ def acquire_instance_lock(path: Path):
 
 def main():
     parser = argparse.ArgumentParser(description='Opt-in ITAM inventory: hostname, OS, CPU, RAM and Agent version only.')
-    parser.add_argument('action', choices=['enroll', 'run', 'once'])
+    parser.add_argument('action', choices=['enroll', 're-enroll', 'run', 'once'])
     parser.add_argument('--server', required=True)
     parser.add_argument('--mode', choices=['real', 'simulated'], required=True)
     parser.add_argument('--state', type=Path, required=True, help='Private state file; separate file for every instance')
@@ -213,8 +218,12 @@ def main():
         lock_path = config.state.with_suffix(config.state.suffix + '.lock')
         lock = acquire_instance_lock(lock_path)
         agent = Agent(config)
-        if args.action == 'enroll':
-            agent.enroll(getpass.getpass('One-use enrollment token: '))
+        if args.action in ('enroll', 're-enroll'):
+            token = getpass.getpass('One-use enrollment token: ')
+            if args.action == 're-enroll':
+                agent.re_enroll(token)
+            else:
+                agent.enroll(token)
             print(json.dumps(dict(event='enrolled', mode=config.mode, agentId=agent.state['agentId'])))
             return 0
         if args.action == 'once':

@@ -9,6 +9,8 @@ public sealed class RegisteredAgent
     public string CredentialHash { get; set; } = "";
     public DateTime CreatedAt { get; set; }
     public DateTime? DisabledAt { get; set; }
+    public DateTime? RevokedAt { get; set; }
+    public string? RevokedReason { get; set; }
     public DateTime? LastSeenAt { get; set; }
     public long LastSequence { get; set; }
     public string Hostname { get; set; } = "";

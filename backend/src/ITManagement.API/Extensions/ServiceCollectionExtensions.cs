@@ -1,3 +1,7 @@
+using System.Security.Claims;
+using ITManagement.Infrastructure.Persistence;
+using ITManagement.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -21,6 +25,18 @@ public static class ServiceCollectionExtensions
         {
             opts.Events = new JwtBearerEvents
             {
+                OnTokenValidated = async context =>
+                {
+                    var principal = context.Principal;
+                    if (!Guid.TryParse(principal?.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
+                        || !int.TryParse(principal.FindFirstValue("security_version"), out var version))
+                    { context.Fail("Invalid user session."); return; }
+                    var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                    var user = await db.AppUsers.AsNoTracking().SingleOrDefaultAsync(u => u.Id == id, context.HttpContext.RequestAborted);
+                    if (user is null || user.Status != UserStatus.Active || user.SecurityVersion != version
+                        || user.Role.ToString() != principal.FindFirstValue(ClaimTypes.Role))
+                        context.Fail("User session was revoked.");
+                },
                 OnChallenge = async context =>
                 {
                     context.HandleResponse();

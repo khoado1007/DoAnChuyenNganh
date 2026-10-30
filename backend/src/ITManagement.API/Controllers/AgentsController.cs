@@ -19,6 +19,11 @@ public sealed class AgentsController(IAgentService agents) : ControllerBase
     public async Task<ActionResult<ApiResponse<EnrollmentIssued>>> Issue(IssueEnrollmentRequest request, CancellationToken ct)
         => Ok(ApiResponse<EnrollmentIssued>.Ok(await agents.IssueAsync(request, ct)));
 
+    [Authorize(Policy = "AdminOnly")]
+    [HttpPost("recovery-tokens")]
+    public async Task<ActionResult<ApiResponse<EnrollmentIssued>>> IssueRecovery(IssueRecoveryRequest request, CancellationToken ct)
+        => Ok(ApiResponse<EnrollmentIssued>.Ok(await agents.IssueRecoveryAsync(request, ct)));
+
     [AllowAnonymous, EnableRateLimiting("agent-enrollment")]
     [HttpPost("enroll")]
     public async Task<ActionResult<ApiResponse<AgentEnrolled>>> Enroll(EnrollRequest request, CancellationToken ct)
@@ -46,17 +51,4 @@ public sealed class AgentsController(IAgentService agents) : ControllerBase
         await agents.DisableAsync(id, ct);
         return Ok(ApiResponse<bool>.Ok(true));
     }
-}
-
-[ApiController, Authorize(Policy = "AdminOnly")]
-[Route("api/assets")]
-public sealed class AssetsController(IAgentService agents) : ControllerBase
-{
-    [HttpGet]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<AgentAssetResponse>>>> List(CancellationToken ct)
-        => Ok(ApiResponse<IReadOnlyList<AgentAssetResponse>>.Ok(await agents.ListAssetsAsync(ct)));
-
-    [HttpPost]
-    public async Task<ActionResult<ApiResponse<AgentAssetResponse>>> Create(CreateAgentAssetRequest request, CancellationToken ct)
-        => Ok(ApiResponse<AgentAssetResponse>.Ok(await agents.CreateAssetAsync(request, ct)));
 }

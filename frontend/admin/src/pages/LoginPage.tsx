@@ -35,7 +35,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: UserResponse) =
     </section>
     <section className="login-form-panel"><div className="login-form-wrap">
       <span className="login-icon"><UserOutlined /></span><Text className="eyebrow">KHU VỰC QUẢN TRỊ</Text>
-      <Title level={2}>Chào mừng trở lại</Title><Text className="muted login-intro">Đăng nhập bằng tài khoản quản trị được cấp.</Text>
+      <Title level={2}>Chào mừng trở lại</Title><Text className="muted login-intro">Đăng nhập bằng tài khoản nội bộ được cấp.</Text>
       {error && <Alert className="login-preview-alert" type="error" showIcon message={error} role="alert" />}
       <Form form={form} layout="vertical" onFinish={submit} disabled={loading} requiredMark={false}>
         <Form.Item name="username" label="Tên đăng nhập" rules={[{ required: true, whitespace: true, message: 'Vui lòng nhập tên đăng nhập.' }]}><Input autoComplete="username" autoFocus size="large" /></Form.Item>

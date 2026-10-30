@@ -25,7 +25,7 @@ export function createApiClient(
     const token = getToken();
     if (token) headers.set('Authorization', `Bearer ${token}`);
     const response = await fetcher(`${baseUrl.replace(/\/$/, '')}${path}`, { ...init, headers });
-    if (response.status === 401) onUnauthorized();
+    if (response.status === 401 && token && token === getToken() && !init.signal?.aborted) onUnauthorized();
     let payload: ApiResponse<T>;
     try { payload = await response.json() as ApiResponse<T>; }
     catch { throw new ApiError('Không thể đọc phản hồi từ máy chủ. Vui lòng thử lại.', response.status); }
@@ -35,3 +35,4 @@ export function createApiClient(
     return payload.data;
   };
 }
+

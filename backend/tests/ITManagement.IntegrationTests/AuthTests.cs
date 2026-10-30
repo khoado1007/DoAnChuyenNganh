@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -16,6 +17,7 @@ namespace ITManagement.IntegrationTests;
 // Uses an isolated database; never connects to the application's development database.
 public sealed class ApiFactory : WebApplicationFactory<Program>
 {
+    public string StorageRoot { get; } = Path.Combine(Path.GetTempPath(), "itam-storage-test-" + Guid.NewGuid().ToString("N"));
     private readonly string connection = new Npgsql.NpgsqlConnectionStringBuilder(
         Environment.GetEnvironmentVariable("TEST_POSTGRES")
         ?? "Host=localhost;Port=5432;Username=postgres;Password=postgres")
@@ -26,6 +28,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Development");
         builder.ConfigureServices(services =>
         {
+            services.RemoveAll<ITManagement.Application.Common.Interfaces.IFileStorageService>();
+            services.AddSingleton<ITManagement.Application.Common.Interfaces.IFileStorageService>(new ITManagement.Infrastructure.FileStorage.LocalFileStorageService(new Microsoft.Extensions.Configuration.ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["FileStorage:RootPath"] = StorageRoot }).Build()));
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connection));
         });
@@ -38,7 +42,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
             await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
             await db.Database.EnsureDeletedAsync();
         }
-        finally { await base.DisposeAsync(); }
+        finally { await base.DisposeAsync(); if (Directory.Exists(StorageRoot)) Directory.Delete(StorageRoot, true); }
     }
 }
 

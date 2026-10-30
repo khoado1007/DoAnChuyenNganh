@@ -4,7 +4,13 @@ namespace ITManagement.Application.Contracts.Agents;
 
 public sealed record IssueEnrollmentRequest(
     Guid AssetId,
-    [Required, RegularExpression("^(real|simulated)$")] string Mode);
+    [Required, RegularExpression("^(real|simulated)$")] string Mode,
+    bool ReplaceExisting = false,
+    [StringLength(200)] string? Reason = null);
+public sealed record IssueRecoveryRequest(
+    Guid AssetId,
+    [Required, RegularExpression("^(real|simulated)$")] string Mode,
+    [StringLength(200)] string? Reason = null);
 public sealed record EnrollRequest(
     [Required, StringLength(64, MinimumLength = 64)] string Token,
     Guid InstanceId,
@@ -23,9 +29,5 @@ public sealed record AgentEnrolled(Guid AgentId, string Credential, int Heartbea
 public sealed record HeartbeatAccepted(DateTime? LastSeenAt, long LastSequence, int HeartbeatIntervalSeconds = 30);
 public sealed record AgentResponse(Guid Id, Guid AssetId, Guid InstanceId, string AssetCode, string AssetStatus,
     string Mode, string Policy, string Connectivity, DateTime? LastSeenAt, string Hostname,
-    string Os, string Cpu, long RamBytes, string AgentVersion);
-public sealed record CreateAgentAssetRequest(
-    [Required, StringLength(50)] string AssetCode,
-    [Required, StringLength(200)] string Name);
-public sealed record AgentAssetResponse(Guid Id, string AssetCode, string Name, string Status);
-
+    string Os, string Cpu, long RamBytes, string AgentVersion,
+    DateTime? RevokedAt = null, string? RevokedReason = null);

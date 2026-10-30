@@ -17,7 +17,7 @@ public class JwtService : IJwtService
         _config = config;
     }
 
-    public string GenerateAccessToken(Guid userId, string username, string role, string email)
+    public string GenerateAccessToken(Guid userId, string username, string role, string email, int securityVersion = 0)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -28,6 +28,7 @@ public class JwtService : IJwtService
             new Claim(JwtRegisteredClaimNames.UniqueName, username),
             new Claim(ClaimTypes.Role, role),
             new Claim(JwtRegisteredClaimNames.Email, email),
+            new Claim("security_version", securityVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
