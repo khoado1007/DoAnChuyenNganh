@@ -4,11 +4,15 @@ namespace ITManagement.Application.Common.Interfaces;
 /// Abstraction cho service lưu trữ tệp thực tế trên Docker volume.
 /// Infrastructure layer sẽ implement.
 /// </summary>
+public sealed record StoredFile(string StoragePath, long SizeBytes);
+
 public interface IFileStorageService
 {
     /// <summary>
     /// Lưu file lên volume, trả về đường dẫn nội bộ (StoragePath).
     /// </summary>
+    Task<StoredFile> SaveLimitedAsync(Guid userId, string fileName, Stream content, long maxBytes, CancellationToken ct = default) => throw new NotSupportedException();
+
     Task<string> SaveAsync(Guid userId, string fileName, Stream content, CancellationToken ct = default);
 
     /// <summary>

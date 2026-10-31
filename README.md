@@ -37,14 +37,14 @@ Khi chạy Compose, Nginx phục vụ web và chuyển tiếp `/api` tới API. 
 - Quản lý tài sản tại `/admin/assets`: tạo, xem chi tiết, tìm kiếm/phân trang, cập nhật thông tin và vòng đời.
 - Cấp phát/trả/thu hồi tài sản và xem lịch sử; Employee xem tài sản đang được cấp tại `/employee`.
 - Quản lý Agent tại `/admin/agents`: enrollment token dùng một lần, heartbeat, disable, phục hồi/re-enrollment và hiển thị riêng connectivity/policy/trạng thái tài sản.
-- API file riêng tư cho Employee: liệt kê, tải xuống và xóa theo chủ sở hữu. Upload và giao diện file chưa có.
+- API file riêng tư cho Employee: upload, liệt kê, tải xuống và xóa theo chủ sở hữu. Upload khóa quota bằng transaction; giao diện file chưa có.
 - Employee và Technician có trang portal theo vai trò; phạm vi portal hiện tại còn giới hạn.
 
 **Còn là bản xem trước hoặc chưa hoàn thiện**
 
 - Dashboard tại `/admin` hiển thị số liệu minh họa.
 - Ticket tại `/admin/tickets` là dữ liệu xem trước phía trình duyệt; chưa có workflow ticket persist qua API. Không dùng dữ liệu này làm báo cáo nghiệp vụ.
-- Upload/quota đầy đủ và file portal chưa triển khai.
+- Quản trị quota, đối soát/recovery storage và file portal chưa triển khai.
 - Dashboard thật, quy trình ticket ba vai trò, hardening triển khai, backup/restore và nghiệm thu end-to-end là các phần roadmap.
 
 Các bản ghi tạo trong những màn preview chỉ giữ trong state của trang, có thể mất khi tải lại. Không dùng Dashboard hoặc Ticket preview cho báo cáo nghiệp vụ.
@@ -156,7 +156,7 @@ API trả response theo envelope `success/message/data/errors`. Swagger/OpenAPI 
 | Cấp phát | `POST /api/assets/{id}/assign`, `POST /api/assets/{id}/return`, `POST /api/assets/{id}/revoke`, `GET /api/assets/{id}/assignments` | Admin cấp, trả/thu hồi và xem lịch sử |
 | Tài sản của tôi | `GET /api/me/assets` | Employee xem tài sản theo JWT |
 | Agent | `POST /api/agents/enrollment-tokens`, `POST /api/agents/enroll`, `POST /api/agents/heartbeat`, `GET /api/agents` | Enrollment, telemetry và quản trị Agent |
-| File riêng tư | `GET /api/files`, `GET /api/files/{id}/download`, `DELETE /api/files/{id}` | Employee liệt kê/tải/xóa file thuộc tài khoản; chưa có upload |
+| File riêng tư | `POST/GET /api/files`, `GET /api/files/{id}/download`, `DELETE /api/files/{id}` | Employee upload/liệt kê/tải/xóa file thuộc tài khoản |
 
 Contract Agent, payload và recovery được mô tả chi tiết trong [agent/README.md](agent/README.md). Các endpoint quản trị Agent yêu cầu Admin; Agent dùng credential riêng, không dùng JWT người dùng.
 
@@ -197,7 +197,8 @@ Smoke tests trình duyệt cho Agent, tài khoản, tài sản và cấp phát n
 ## Lưu trữ và vận hành dữ liệu
 
 - PostgreSQL và private file storage được lưu ở Docker named volumes khi chạy Compose.
-- API file hiện có list/download/delete theo owner; upload chưa mở. Delete cập nhật metadata/quota logic trong transaction, sau đó dọn blob; nếu filesystem lỗi, gọi lại DELETE cùng ID để retry cleanup.
+- API file có upload/list/download/delete theo owner; upload tối đa 10 MiB/file, multipart field `file`, request tối đa 11 MiB. API trả 201 với metadata; không trả storage key. Dung lượng được tính bằng byte stream thực tế, khóa cùng hàng quota với thao tác xóa. Delete cập nhật metadata/quota logic trong transaction, sau đó dọn blob; nếu filesystem lỗi, gọi lại DELETE cùng ID để retry cleanup.
+- Khi mất phản hồi commit, blob được giữ để tránh xóa nhầm dữ liệu đã commit. Cleanup thất bại hoặc tiến trình bị ngắt có thể để lại orphan; đối soát/recovery thuộc P07B và chưa triển khai. Không tự retry upload nếu chưa kiểm tra danh sách file.
 - File không được phục vụ như static asset. Không mount private volume vào Nginx hoặc chia sẻ trực tiếp đường dẫn trên đĩa.
 - Sao lưu cần bao gồm cả PostgreSQL lẫn private file storage và phải kiểm tra quy trình restore; chưa có quy trình backup/restore production được xác nhận.
 - Khi nâng phiên bản, không tự xóa volume hoặc chạy migration trên dữ liệu quan trọng nếu chưa có backup và kế hoạch rollback.
@@ -206,4 +207,4 @@ Smoke tests trình duyệt cho Agent, tài khoản, tài sản và cấp phát n
 
 - [Python Agent: cài đặt, vận hành và kiểm thử](agent/README.md)
 
-Trạng thái tính năng trong README được đối chiếu với repository ngày 30/10/2026. Các tính năng chưa kết nối API được ghi rõ là preview hoặc chưa triển khai.
+Trạng thái tính năng trong README được đối chiếu với repository ngày 31/10/2026. Các tính năng chưa kết nối API được ghi rõ là preview hoặc chưa triển khai.

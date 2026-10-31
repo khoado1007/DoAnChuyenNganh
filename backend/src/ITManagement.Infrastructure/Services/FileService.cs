@@ -40,6 +40,57 @@ public sealed class FileService(AppDbContext db, IFileStorageService storage, IC
         catch (IOException) { throw new BusinessRuleException("Không đọc được file. Vui lòng thử lại."); }
         catch (UnauthorizedAccessException) { throw new BusinessRuleException("Không đọc được file. Vui lòng thử lại."); }
     }
+    public async Task<FileResponse> UploadAsync(string fileName, Stream content, CancellationToken ct)
+    {
+        if (!current.IsAuthenticated || current.UserId is not Guid owner)
+            throw new UnauthorizedException();
+        var name = fileName.Replace('\\', '/').Split('/').Last();
+        if (string.IsNullOrWhiteSpace(name) || name is "." or ".." || name.Length > 255 || name.Any(char.IsControl))
+            throw new BusinessRuleException("Tên file không hợp lệ (tối đa 255 ký tự). ");
+
+        StoredFile? stored = null;
+        var commitStarted = false;
+        try
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            var quota = await db.StorageQuotas.FromSqlInterpolated($"SELECT * FROM \"StorageQuotas\" WHERE \"UserId\" = {owner} FOR UPDATE")
+                .SingleOrDefaultAsync(q => !q.IsDeleted, ct)
+                ?? throw new BusinessRuleException("Tài khoản chưa có quota lưu trữ.");
+            if (quota.UsedBytes < 0 || quota.QuotaBytes < quota.UsedBytes)
+                throw new BusinessRuleException("Dung lượng lưu trữ không nhất quán; cần quản trị kiểm tra.");
+            stored = await storage.SaveLimitedAsync(owner, name, content,
+                Math.Min(FileUploadLimits.MaxFileBytes, quota.QuotaBytes - quota.UsedBytes), ct);
+            var file = new FileMetadata
+            {
+                StorageQuotaId = quota.Id, DisplayName = name, StoragePath = stored.StoragePath,
+                SizeBytes = stored.SizeBytes, ContentType = "application/octet-stream",
+                FileExtension = Path.GetExtension(name), CreatedBy = current.Username
+            };
+            db.FileMetadata.Add(file);
+            quota.UsedBytes += stored.SizeBytes;
+            quota.UpdatedAt = DateTime.UtcNow; quota.UpdatedBy = current.Username;
+            await db.SaveChangesAsync(ct);
+            ct.ThrowIfCancellationRequested();
+            // Past this point do not cancel commit: its result could otherwise be ambiguous.
+            commitStarted = true;
+            await tx.CommitAsync(CancellationToken.None);
+            return new(file.Id, file.DisplayName, file.SizeBytes, file.UploadedAt, file.VirtualFolder);
+        }
+        catch (Exception error)
+        {
+            // A failed commit may have succeeded on the server. Never delete its blob blindly.
+            // Known-uncommitted uploads are cleaned with a token independent of the request.
+            if (stored is not null && !commitStarted)
+            {
+                try { await storage.DeleteAsync(stored.StoragePath, CancellationToken.None); }
+                catch (IOException) { /* P07B reconciliation can recover orphan blobs. */ }
+                catch (UnauthorizedAccessException) { /* Retain for reconciliation. */ }
+            }
+            if (error is IOException or UnauthorizedAccessException)
+                throw new BusinessRuleException("Không lưu được file. Vui lòng thử lại.");
+            throw;
+        }
+    }
     public async Task DeleteAsync(Guid id, CancellationToken ct)
     {
         string key;

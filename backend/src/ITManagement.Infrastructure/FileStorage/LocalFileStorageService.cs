@@ -35,7 +35,12 @@ public sealed class LocalFileStorageService : IFileStorageService
         return path;
     }
     public async Task<string> SaveAsync(Guid userId, string fileName, Stream content, CancellationToken ct = default)
+        => (await SaveLimitedAsync(userId, fileName, content, long.MaxValue, ct)).StoragePath;
+
+    public async Task<StoredFile> SaveLimitedAsync(Guid userId, string fileName, Stream content, long maxBytes, CancellationToken ct = default)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxBytes);
+        ct.ThrowIfCancellationRequested();
         var key = $"{userId:D}/{Guid.NewGuid():N}";
         var path = Resolve(key);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -45,8 +50,18 @@ public sealed class LocalFileStorageService : IFileStorageService
         {
             await using var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous);
             created = true;
-            await content.CopyToAsync(output, ct);
-            return key;
+            var buffer = new byte[81920];
+            long total = 0;
+            while (true)
+            {
+                var read = await content.ReadAsync(buffer.AsMemory(), ct);
+                if (read == 0) break;
+                if (read > maxBytes - total)
+                    throw new ITManagement.Domain.Exceptions.QuotaExceededException(total > long.MaxValue - read ? long.MaxValue : total + read, maxBytes);
+                await output.WriteAsync(buffer.AsMemory(0, read), ct);
+                total += read;
+            }
+            return new StoredFile(key, total);
         }
         catch
         {

@@ -7,3 +7,8 @@ public sealed class FileQuery
 }
 public sealed record FileResponse(Guid Id, string DisplayName, long SizeBytes, DateTime UploadedAt, string VirtualFolder);
 public sealed record FileDownload(Stream Content, string FileName);
+public static class FileUploadLimits
+{
+    public const long MaxFileBytes = 10 * 1024 * 1024;
+    public const long MaxRequestBytes = 11 * 1024 * 1024;
+}
